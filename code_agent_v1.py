@@ -166,20 +166,26 @@ def setup_game(num_players: int, enable_reset: bool = True) -> GameState:
     # Use random generator for all randomness
     rng = random.Random()  # Uses system time for true randomness
     
-    # Generate unique code cards with 4 DIFFERENT digits each
-    # Each code must have 4 distinct digits (0-9), and no two players get the same code
-    code_cards: List[CodeCard] = []
-    used_codes = set()
+    # Official 10 code cards from the physical CODE game
+    OFFICIAL_CODES: List[Tuple[int, int, int, int]] = [
+        (3, 0, 4, 5),
+        (2, 4, 8, 9),
+        (2, 3, 5, 7),
+        (1, 4, 7, 9),
+        (1, 3, 6, 8),
+        (1, 2, 5, 8),
+        (0, 4, 5, 9),
+        (0, 2, 7, 8),
+        (0, 1, 6, 9),
+        (3, 4, 5, 6),
+    ]
     
-    while len(code_cards) < num_players:
-        # Generate 4 different random digits
-        digits = rng.sample(range(10), 4)  # sample ensures no duplicates
-        code_tuple = tuple(digits)
-        
-        # Ensure this exact code hasn't been used
-        if code_tuple not in used_codes:
-            used_codes.add(code_tuple)
-            code_cards.append(CodeCard(target=code_tuple))
+    # Randomly select unique codes for each player from the official set
+    if num_players > len(OFFICIAL_CODES):
+        raise ValueError(f"Cannot have more than {len(OFFICIAL_CODES)} players (only {len(OFFICIAL_CODES)} official codes)")
+    
+    selected_codes = rng.sample(OFFICIAL_CODES, num_players)
+    code_cards: List[CodeCard] = [CodeCard(target=code) for code in selected_codes]
 
     # Build draw pile: all play cards
     draw_pile = number_cards + action_cards

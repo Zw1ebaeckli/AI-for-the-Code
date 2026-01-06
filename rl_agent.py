@@ -1,3 +1,4 @@
+# Author: Jasmin Furler
 """
 Reinforcement Learning Agent for CODE card game.
 Uses Q-learning with function approximation.
