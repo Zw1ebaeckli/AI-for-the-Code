@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CODE - Spiel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow:wght@500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/game.css') }}">
+</head>
+<body class="game-screen">
+    <div class="matrix-background-top"></div>
+    <div class="matrix-background-bottom"></div>
+    
+    <div class="game-container">
+        <!-- Top Bar with Menu -->
+        <div class="top-bar">
+            <button class="btn-menu" onclick="window.location.href='/'">← MENU</button>
+        </div>
+
+        <!-- Main Game Board -->
+        <main class="game-board">
+            <!-- Opponent hand backs across the top -->
+            <div class="opponent-hand" id="opponentHand">
+                <span class="opponent-count" id="opponentCount"></span>
+            </div>
+
+            <!-- Center Game Area -->
+            <div class="center-area">
+                <div class="deck-section">
+                    <!-- Draw Pile -->
+                    <div class="pile-container">
+                        <div class="pile-label">AUFNEHMEN (A)</div>
+                        <div class="draw-pile" id="drawPile">
+                            <img src="{{ url_for('static', filename='assets/cards/back/deck2_back.png') }}" alt="Kartenstöck">
+                            <span class="card-count" id="deckCount">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Action Card Discard Pile -->
+                    <div class="pile-container">
+                        <div class="action-discard" id="actionDiscard">
+                            <!-- Action cards discard pile -->
+                        </div>
+                    </div>
+
+                    <!-- Regular Discard Pile -->
+                    <div class="pile-container">
+                        <div class="discard-pile" id="discardPile">
+                            <!-- Top discard card -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="game-status">
+                    <p id="statusMessage">Spiel wird vorbereitet...</p>
+                    <p id="turnIndicator"></p>
+                </div>
+            </div>
+
+            <!-- Player Hand at Bottom -->
+            <div class="player-hand-area">
+                <div class="player-hand" id="playerHand">
+                    <!-- Player's cards (sorted and overlapping) -->
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Sidebar Code Card Display -->
+        <aside class="code-card-sidebar">
+            <div class="code-card-panel">
+                <div class="code-window">
+                    <div class="code-window-header">
+                        <div class="code-window-title">CODEKARTE</div>
+                        <div class="code-window-dots"><span></span><span></span><span></span></div>
+                    </div>
+                    <div class="code-window-body">
+                        <div class="code-card-visual" id="playerCodeCard">
+                            <!-- Player's code card image -->
+                        </div>
+                        <div class="code-display-inline">
+                            <span id="code0">?</span>
+                            <span id="code1">?</span>
+                            <span id="code2">?</span>
+                            <span id="code3">?</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='js/game-matrix.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/game.js') }}"></script>
+</body>
+</html>

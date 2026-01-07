@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Play - CODE</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="rules-page">
+            <h1>How to Play CODE</h1>
+            
+            <button class="btn btn-secondary back-btn" onclick="window.location.href='/'">Back to Menu</button>
+
+            <section class="rules-section">
+                <h2>Objective</h2>
+                <p>Be the first player to crack your opponent's secret code by deducing the correct 4-digit combination.</p>
+            </section>
+
+            <section class="rules-section">
+                <h2>Setup</h2>
+                <ul>
+                    <li>Each player receives a random 4-digit code card</li>
+                    <li>Players draw 5 cards from the deck to start</li>
+                    <li>The deck contains number cards (0-9 in 4 colors) and action cards</li>
+                </ul>
+            </section>
+
+            <section class="rules-section">
+                <h2>Gameplay</h2>
+                <p><strong>On Your Turn:</strong></p>
+                <ol>
+                    <li><strong>Play a Card:</strong> Play a number or action card from your hand</li>
+                    <li><strong>Make a Guess:</strong> Try to guess one digit of your opponent's code</li>
+                    <li><strong>Get Feedback:</strong> 
+                        <ul>
+                            <li>✓ Correct digit in correct position</li>
+                            <li>~ Correct digit in wrong position</li>
+                            <li>✗ Digit not in code</li>
+                        </ul>
+                    </li>
+                    <li><strong>Draw a Card:</strong> Draw from the deck to replenish your hand</li>
+                </ol>
+            </section>
+
+            <section class="rules-section">
+                <h2>Action Cards</h2>
+                <ul>
+                    <li><strong>JOKER:</strong> Wild card, can be played as any number</li>
+                    <li><strong>AUSSETZEN (Skip):</strong> Opponent skips their next turn</li>
+                    <li><strong>PLUS2:</strong> Opponent draws 2 extra cards</li>
+                    <li><strong>TAUSCH (Swap):</strong> Swap hands with opponent</li>
+                    <li><strong>GESCHENK (Gift):</strong> Give a card to opponent</li>
+                    <li><strong>RESET:</strong> All players draw new codes</li>
+                    <li><strong>RICHTUNGSWECHSEL (Reverse):</strong> Reverse play direction (multiplayer)</li>
+                </ul>
+            </section>
+
+            <section class="rules-section">
+                <h2>Winning</h2>
+                <p>The first player to correctly guess all 4 digits of their opponent's code in the correct positions wins the game!</p>
+            </section>
+
+            <button class="btn btn-primary" onclick="window.location.href='/'">Start Playing!</button>
+        </div>
+    </div>
+</body>
+</html>

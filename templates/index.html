@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CODE - Kartenspiel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow:wght@500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/start.css') }}">
+</head>
+<body class="start-screen">
+    <div class="matrix-background"></div>
+    
+    <!-- Removed menu button per design -->
+
+    <div class="start-screen-content">
+        <div class="logo-container">
+            <img src="{{ url_for('static', filename='img/Code_Logo.svg') }}" alt="CODE Logo" />
+        </div>
+
+        <nav class="menu-links">
+            <a class="menu-link" id="playBtn">SPIELEN</a>
+            <a class="menu-link" href="/rules">SPIELREGELN</a>
+            <span class="menu-link disabled">BESTENLISTE</span>
+        </nav>
+
+        <div class="key-art">
+            <img src="{{ url_for('static', filename='img/Code_Key_Art.svg') }}" alt="Key Art">
+        </div>
+    </div>
+
+    <!-- Game Setup Modal -->
+    <div id="setupModal" class="modal">
+        <div class="modal-content game-setup">
+            <div class="modal-header">
+                <h2>SPIELVORBEREITUNG</h2>
+                <div class="modal-nav-dots">
+                    <button class="nav-dot" id="navDot1"></button>
+                    <button class="nav-dot" id="navDot2"></button>
+                    <button class="nav-dot" id="navDot3"></button>
+                </div>
+            </div>
+            
+            <input type="text" id="playerName" class="form-input" placeholder="Name eingeben" maxlength="20">
+
+            <label class="agent-label">WÄHLE DEINEN GEGNER:</label>
+            <div class="agent-selection">
+                <div class="agent-option agent-rule-based" data-agent="rule_based">
+                    <input type="radio" name="agent" value="rule_based" id="ruleBasedAgent" checked>
+                    <label for="ruleBasedAgent">
+                        <h3>REGELBASIERTER<br>AGENT</h3>
+                        <p>Weniger Stark</p>
+                    </label>
+                </div>
+                <div class="agent-option agent-rl" data-agent="rl">
+                    <input type="radio" name="agent" value="rl" id="rlAgent">
+                    <label for="rlAgent">
+                        <h3>REINFORCEMENT<br>AGENT</h3>
+                        <p>Trainierte KI mit Taktik</p>
+                    </label>
+                </div>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" id="cancelBtn">Abbrechen</button>
+                <button class="btn btn-primary" id="startGameBtn">Spiel starten</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/start.js') }}"></script>
+</body>
+</html>
