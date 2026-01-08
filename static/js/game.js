@@ -42,6 +42,51 @@ if (codeWindowDotsEl && codeWindowEl && codeSidebarEl) {
     });
 }
 
+// Code card drag functionality
+let isDraggingCodeCard = false;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
+const codeWindowBodyEl = document.querySelector('.code-window-body');
+
+if (playerCodeCardEl && codeWindowBodyEl) {
+    playerCodeCardEl.addEventListener('mousedown', (e) => {
+        isDraggingCodeCard = true;
+        dragOffsetX = e.clientX - playerCodeCardEl.getBoundingClientRect().left;
+        dragOffsetY = e.clientY - playerCodeCardEl.getBoundingClientRect().top;
+        playerCodeCardEl.classList.add('dragging');
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDraggingCodeCard || !codeWindowBodyEl) return;
+
+        const bodyRect = codeWindowBodyEl.getBoundingClientRect();
+        let newX = e.clientX - bodyRect.left - dragOffsetX;
+        let newY = e.clientY - bodyRect.top - dragOffsetY;
+
+        // Constrain card within the code window body
+        const cardWidth = playerCodeCardEl.offsetWidth;
+        const cardHeight = playerCodeCardEl.offsetHeight;
+        const padding = 10;
+
+        newX = Math.max(padding, Math.min(newX, bodyRect.width - cardWidth - padding));
+        newY = Math.max(padding, Math.min(newY, bodyRect.height - cardHeight - padding));
+
+        playerCodeCardEl.style.position = 'absolute';
+        playerCodeCardEl.style.left = newX + 'px';
+        playerCodeCardEl.style.top = newY + 'px';
+        playerCodeCardEl.style.margin = '0';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isDraggingCodeCard) {
+            isDraggingCodeCard = false;
+            playerCodeCardEl.classList.remove('dragging');
+        }
+    });
+}
+
+
 // Code slot elements
 const codeSlots = [
     document.getElementById('code0'),
@@ -93,6 +138,30 @@ if (sumModeToggleBtn) {
                     : 'Warten auf Gegner...';
             }
         }
+    });
+}
+
+// Game Over button handlers
+const btnPlayAgain = document.getElementById('btnPlayAgain');
+const btnReturnMenu = document.getElementById('btnReturnMenu');
+
+if (btnPlayAgain) {
+    btnPlayAgain.addEventListener('click', () => {
+        // Clear current game/session but keep player settings
+        const name = sessionStorage.getItem('playerName');
+        const agent = sessionStorage.getItem('agentType');
+        sessionStorage.clear();
+        if (name) sessionStorage.setItem('playerName', name);
+        if (agent) sessionStorage.setItem('agentType', agent);
+        window.location.href = '/game';
+    });
+}
+
+if (btnReturnMenu) {
+    btnReturnMenu.addEventListener('click', () => {
+        // Return to main menu and clear session
+        sessionStorage.clear();
+        window.location.href = '/';
     });
 }
 
@@ -567,9 +636,15 @@ if (drawPileEl) {
 
 // Handle game over
 function handleGameOver(data) {
-    const message = data.winner === 'player' 
-        ? '🎉 Sieg! Du hast deinen CODE erreicht!' 
-        : '😔 Niederlage. Der Gegner war schneller.';
+    const isWin = data.winner === 'player';
+    
+    // Show game over overlay
+    showGameOverScreen(isWin);
+    
+    // Keep status message updated
+    const message = isWin 
+        ? 'Sieg! Du hast deinen CODE erreicht!' 
+        : 'Niederlage. Der Gegner war schneller.';
     
     if (statusMessageEl) statusMessageEl.textContent = message;
     if (turnIndicatorEl) turnIndicatorEl.textContent = 'Game Over';
@@ -586,14 +661,61 @@ function handleGameOver(data) {
             } catch {}
         }
     }
-
-    // Show play again button after delay
-    setTimeout(() => {
-        if (confirm(message + '\n\nNochmal spielen?')) {
-            window.location.href = '/';
-        }
-    }, 2000);
 }
+
+function showGameOverScreen(isWin) {
+    const overlay = document.getElementById('gameOverOverlay');
+    const title = document.getElementById('gameOverTitle');
+    const confettiContainer = document.getElementById('confettiContainer');
+    
+    if (!overlay || !title) return;
+    
+    // Set title and styling
+    if (isWin) {
+        title.textContent = 'Du hast gewonnen!';
+        title.className = 'game-over-title won';
+        createConfetti(confettiContainer);
+    } else {
+        title.textContent = 'Du wurdest besiegt!';
+        title.className = 'game-over-title lost';
+        confettiContainer.innerHTML = ''; // No confetti for loss
+    }
+    
+    // Show overlay
+    overlay.classList.add('active');
+}
+
+function createConfetti(container) {
+    if (!container) return;
+    
+    container.innerHTML = ''; // Clear existing
+    
+    // Create 100 confetti pieces
+    for (let i = 0; i < 100; i++) {
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti';
+        
+        // Random horizontal position
+        confetti.style.left = Math.random() * 100 + '%';
+        
+        // Random animation delay
+        confetti.style.animationDelay = Math.random() * 3 + 's';
+        
+        // Random animation duration
+        confetti.style.animationDuration = (2 + Math.random() * 2) + 's';
+        
+        // Random size
+        const size = 8 + Math.random() * 8;
+        confetti.style.width = size + 'px';
+        confetti.style.height = size + 'px';
+        
+        // Random rotation
+        confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
+        
+        container.appendChild(confetti);
+    }
+}
+
 
 function renderOpponentReveal(cards) {
     if (!opponentHandEl) return;

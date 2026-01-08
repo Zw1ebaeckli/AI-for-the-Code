@@ -147,6 +147,22 @@
         </div>
     </div>
 
+    <!-- Game Over Screen -->
+    <div class="game-over-overlay" id="gameOverOverlay">
+        <div class="confetti-container" id="confettiContainer"></div>
+        <div class="game-over-content">
+            <h1 class="game-over-title" id="gameOverTitle"></h1>
+            <div class="game-over-buttons">
+                <button class="game-over-btn btn-play-again" id="btnPlayAgain">
+                    <span>Nochmal spielen</span>
+                </button>
+                <button class="game-over-btn btn-menu" id="btnReturnMenu">
+                    <span>Zurück zum Menü</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='js/game-matrix.js') }}"></script>
     <script src="{{ url_for('static', filename='js/game.js') }}"></script>

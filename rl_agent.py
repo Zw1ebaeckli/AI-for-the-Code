@@ -21,14 +21,17 @@ REWARDS = {
     "win": 100,              # Won the game
     "lose": -100,            # Lost the game
     "timeout": -50,          # Game timed out
-    "progress_gain": 10,     # Gained a code match
-    "progress_loss": -15,    # Lost a code match
-    "hand_reduce": 2,        # Reduced hand size (when progress >= 4)
+    "progress_gain": 15,     # Gained a code match (increased from 10)
+    "progress_loss": -20,    # Lost a code match (more severe)
+    "hand_reduce": 1,        # Reduced hand size (lowered from 2 - less aggressive)
+    "hand_reduce_smart": 3,  # Reduced hand by playing duplicate/non-code card
     "hand_increase": -1,     # Hand size increased
-    "play_action": 3,        # Played an action card
-    "protect_code": 5,       # Kept a code-matching card
-    "play_duplicate": 4,     # Played duplicate code card (smart)
-    "forced_draw": -2,       # Had to draw (no good plays)
+    "play_action": 2,        # Played an action card (slightly reduced)
+    "protect_code": 8,       # Successfully kept code-matching card (increased)
+    "play_duplicate": 5,     # Played duplicate code card - smart move
+    "play_non_code": 2,      # Played non-code card (better than code card)
+    "forced_draw": -3,       # Had to draw when plays available (increased penalty)
+    "endgame_hand_reduce": 5,# Reduced hand when close to winning (progress = 4)
 }
 
 
@@ -60,18 +63,22 @@ def get_state_features(game: GameState, player_idx: int) -> Tuple:
     action_count = sum(1 for c in hand if c.kind == "ACTION")
     action_bucket = min(action_count, 3)
     
-    # Feature 5: Top discard value (for matching)
+    # Feature 5: Non-code number cards (safe to play)
+    non_code_count = sum(1 for c in hand if c.kind == "NUMBER" and c.value not in code_digits)
+    non_code_bucket = min(non_code_count // 2, 3)
+    
+    # Feature 6: Top discard value (for matching)
     top = game.number_discard[-1] if game.number_discard else None
     top_value = top.value if top else -1
     
-    # Feature 6: Can play (has matching cards)
+    # Feature 7: Can play (has matching cards)
     moves = legal_moves(game)
     can_play = int(any(m[0] in ("PlayNumber", "PlaySum", "PlayAction") for m in moves))
     
-    # Feature 7: Pending PLUS2
+    # Feature 8: Pending PLUS2
     pending = min(game.pending_plus2 // 2, 2)
     
-    return (hand_bucket, progress, dup_bucket, action_bucket, top_value, can_play, pending)
+    return (hand_bucket, progress, dup_bucket, action_bucket, non_code_bucket, top_value, can_play, pending)
 
 
 def get_action_features(move_type: str, payload: Tuple, game: GameState, player_idx: int) -> Tuple:
@@ -85,14 +92,37 @@ def get_action_features(move_type: str, payload: Tuple, game: GameState, player_
     action_types = {"PlayNumber": 0, "PlaySum": 1, "PlayAction": 2, "PlayAny": 3, "Draw": 4}
     action_id = action_types.get(move_type, 5)
     
-    # Is it playing a code card?
+    # Card value analysis for the move
     plays_code = 0
+    is_duplicate = 0
+    
     if move_type in ("PlayNumber", "PlayAny") and payload:
-        if payload[0].kind == "NUMBER" and payload[0].value in code_digits:
-            plays_code = 1
+        card = payload[0]
+        if card.kind == "NUMBER":
+            # Is it a code card?
+            if card.value in code_digits:
+                plays_code = 1
+                # Is it a duplicate?
+                same_value_count = sum(1 for c in player.hand if c.kind == "NUMBER" and c.value == card.value)
+                if same_value_count > 1:
+                    is_duplicate = 1
+    
     elif move_type == "PlaySum" and payload:
-        if (payload[0].value in code_digits) or (payload[1].value in code_digits):
-            plays_code = 1
+        card_a, card_b = payload[0], payload[1]
+        # Count code cards being played
+        code_count = 0
+        if card_a.value in code_digits:
+            code_count += 1
+        if card_b.value in code_digits:
+            code_count += 1
+        
+        plays_code = code_count  # 0, 1, or 2
+        
+        # Check if either is a duplicate
+        count_a = sum(1 for c in player.hand if c.kind == "NUMBER" and c.value == card_a.value)
+        count_b = sum(1 for c in player.hand if c.kind == "NUMBER" and c.value == card_b.value)
+        if count_a > 1 or count_b > 1:
+            is_duplicate = 1
     
     # Action card type (if applicable)
     action_subtype = 0
@@ -100,7 +130,7 @@ def get_action_features(move_type: str, payload: Tuple, game: GameState, player_
         subtypes = {"PLUS2": 1, "AUSSETZEN": 2, "GESCHENK": 3, "TAUSCH": 4, "RICHTUNGSWECHSEL": 5, "RESET": 6}
         action_subtype = subtypes.get(payload[0].action, 0)
     
-    return (action_id, plays_code, action_subtype)
+    return (action_id, plays_code, is_duplicate, action_subtype)
 
 
 class QLearningAgent:
@@ -213,6 +243,7 @@ def compute_reward(game_before: GameState, game_after: GameState, move: Tuple[st
     
     player_before = game_before.players[player_idx]
     player_after = game_after.players[player_idx]
+    code_digits = set(player_before.code.target)
     
     # Progress change
     progress_before = count_code_matches(player_before.hand, player_before.code)
@@ -223,20 +254,77 @@ def compute_reward(game_before: GameState, game_after: GameState, move: Tuple[st
     elif progress_after < progress_before:
         reward += REWARDS["progress_loss"] * (progress_before - progress_after)
     
-    # Hand size change (reward reduction when we have enough progress)
+    # Hand size change - be smarter about what we're playing
     hand_before = len(player_before.hand)
     hand_after = len(player_after.hand)
+    move_type, payload = move
     
-    if progress_after >= 4:
-        if hand_after < hand_before:
-            reward += REWARDS["hand_reduce"] * (hand_before - hand_after)
+    # Check if we played a card intelligently
+    played_card_info = None
+    if move_type in ("PlayNumber", "PlayAny") and payload:
+        card = payload[0]
+        if card.kind == "NUMBER":
+            is_code_card = card.value in code_digits
+            # Count duplicates in hand
+            same_value_count = sum(1 for c in player_before.hand if c.kind == "NUMBER" and c.value == card.value)
+            is_duplicate = same_value_count > 1
+            played_card_info = (is_code_card, is_duplicate)
+    elif move_type == "PlaySum" and payload:
+        # For sum plays, check if we played duplicates or non-code cards
+        card_a, card_b = payload[0], payload[1]
+        is_code_a = card_a.value in code_digits
+        is_code_b = card_b.value in code_digits
+        
+        # Count how many of each value we have
+        count_a = sum(1 for c in player_before.hand if c.kind == "NUMBER" and c.value == card_a.value)
+        count_b = sum(1 for c in player_before.hand if c.kind == "NUMBER" and c.value == card_b.value)
+        
+        # Best case: both are duplicates or non-code
+        if (count_a > 1 and count_b > 1) or (not is_code_a and not is_code_b):
+            played_card_info = (False, True)  # Treat as smart play
+        elif count_a > 1 or count_b > 1:
+            played_card_info = (is_code_a and is_code_b, True)  # Mixed
+        else:
+            played_card_info = (is_code_a or is_code_b, False)
+    
+    # Reward hand reduction based on what was played
+    if hand_after < hand_before:
+        reduction = hand_before - hand_after
+        
+        if progress_after == 4:
+            # Endgame: aggressively reduce hand
+            reward += REWARDS["endgame_hand_reduce"] * reduction
+        elif played_card_info:
+            is_code_card, is_duplicate = played_card_info
+            
+            if is_duplicate and is_code_card:
+                # Played a duplicate code card - smart!
+                reward += REWARDS["play_duplicate"] * reduction
+            elif not is_code_card:
+                # Played a non-code card - good
+                reward += REWARDS["play_non_code"] * reduction
+            elif is_code_card and not is_duplicate:
+                # Played a valuable unique code card - only small reward
+                reward += REWARDS["hand_reduce"] * reduction * 0.5
+            else:
+                reward += REWARDS["hand_reduce_smart"] * reduction
+        else:
+            # Action card or other play
+            reward += REWARDS["hand_reduce"] * reduction
+    
+    # Protect code bonus: reward for keeping code cards when we could have played them
+    if progress_before < 4 and progress_after < 4:
+        # Count code-matching cards kept
+        code_cards_kept = sum(1 for c in player_after.hand if c.kind == "NUMBER" and c.value in code_digits)
+        if code_cards_kept >= progress_after and move_type in ("PlayNumber", "PlaySum", "PlayAny"):
+            # Successfully kept code cards while playing
+            reward += REWARDS["protect_code"] * 0.1  # Small bonus for conservation
     
     # Action card bonus
-    move_type, payload = move
     if move_type == "PlayAction":
         reward += REWARDS["play_action"]
     
-    # Draw penalty (when we had options)
+    # Draw penalty (when we had play options)
     if move_type == "Draw":
         moves = legal_moves(game_before)
         if any(m[0] in ("PlayNumber", "PlaySum", "PlayAction") for m in moves):
