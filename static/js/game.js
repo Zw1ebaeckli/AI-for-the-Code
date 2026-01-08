@@ -66,6 +66,7 @@ let gameState = {
 // Track selected indices for potential PlaySum
 let selectedIndices = [];
 let legalMoves = [];
+let playableCardIndices = new Set();
 let sumModeActive = false;
 let opponentRevealHand = [];
 
@@ -118,6 +119,15 @@ socket.on('game_state', (state) => {
 
 socket.on('legal_moves', (data) => {
     legalMoves = data.moves || [];
+    // Build set of playable single-card indices for hover/click feedback
+    const playable = new Set();
+    for (const m of legalMoves) {
+        if (m.type === 'PlayNumber' || m.type === 'PlayAny' || m.type === 'PlayAction') {
+            if (typeof m.card_index === 'number') playable.add(m.card_index);
+        }
+    }
+    playableCardIndices = playable;
+    updatePlayableClasses();
     renderLegalMoves();
 });
 
@@ -295,6 +305,9 @@ function renderPlayerHand(cards, newIndices = new Set()) {
 
     sorted.forEach(({ card, origIndex }, idx) => {
         const cardEl = createCardElement(card, origIndex);
+        if (!playableCardIndices.has(origIndex)) {
+            cardEl.classList.add('unplayable');
+        }
         const angle = startAngle + angleStep * idx;
         const xOffset = -totalWidth / 2 + baseOffset * idx;
         const raise = Math.abs(angle) * 0.6; // edges lower, center higher
@@ -363,6 +376,14 @@ function createCardElement(card, index) {
             if (statusMessageEl) statusMessageEl.textContent = 'Nicht dein Zug!';
             return;
         }
+
+        // If not playable as a single move and not in sum mode, shake + red overlay
+        if (!sumModeActive && !playableCardIndices.has(index)) {
+            cardEl.classList.add('invalid', 'shake');
+            setTimeout(() => cardEl.classList.remove('shake'), 500);
+            setTimeout(() => cardEl.classList.remove('invalid'), 700);
+            return;
+        }
         
         if (card.type === 'number') {
             // In sum mode, allow selection of two cards
@@ -426,6 +447,20 @@ function createCardElement(card, index) {
     return cardEl;
 }
 
+// Update CSS classes for playable/unplayable cards without re-rendering
+function updatePlayableClasses() {
+    document.querySelectorAll('.hand-card').forEach((el) => {
+        const idx = parseInt(el.dataset.index, 10);
+        if (Number.isFinite(idx)) {
+            if (playableCardIndices.has(idx)) {
+                el.classList.remove('unplayable');
+            } else {
+                el.classList.add('unplayable');
+            }
+        }
+    });
+}
+
 // Get card image path
 function getCardImagePath(card) {
     if (card.type === 'number') {
@@ -457,6 +492,7 @@ function getCardImagePath(card) {
 function renderNumberDiscardPile(cards) {
     if (!discardPileEl) return;
     discardPileEl.innerHTML = '';
+    discardPileEl.classList.toggle('has-stack', Array.isArray(cards) && cards.length > 0);
     const recent = cards.slice(-4);
     recent.forEach((card) => {
         const cardEl = document.createElement('div');
@@ -676,6 +712,8 @@ function showTauschModal(cardIndex) {
     const cardsGrid = document.getElementById('tauschCardsGrid');
     const actionOption = document.getElementById('tauschActionOption');
     const actionPreview = document.getElementById('tauschActionPreview');
+    const numberPreviewImg = document.getElementById('tauschNumberPreviewImg');
+    const actionPreviewImg = document.getElementById('tauschActionPreviewImg');
     
     // Clear previous cards
     cardsGrid.innerHTML = '';
@@ -688,6 +726,30 @@ function showTauschModal(cardIndex) {
             actionPreview.textContent = hasActionCards
                 ? 'Oberste Karte vom Aktionsstapel'
                 : 'Keine Aktionskarten verfügbar';
+        }
+        if (actionPreviewImg) {
+            if (hasActionCards) {
+                const topAction = gameState.action_discard[gameState.action_discard.length - 1];
+                actionPreviewImg.src = getCardImagePath(topAction);
+                actionPreviewImg.style.display = 'block';
+            } else {
+                actionPreviewImg.style.display = 'none';
+            }
+        }
+    }
+
+    // Handle top number card preview
+    if (numberPreviewImg) {
+        const hasNumber = Array.isArray(gameState.number_discard) && gameState.number_discard.length > 0;
+        if (hasNumber) {
+            const topNum = gameState.number_discard[gameState.number_discard.length - 1];
+            numberPreviewImg.src = getCardImagePath(topNum);
+            numberPreviewImg.style.display = 'block';
+        } else if (gameState.discard_top) {
+            numberPreviewImg.src = getCardImagePath(gameState.discard_top);
+            numberPreviewImg.style.display = 'block';
+        } else {
+            numberPreviewImg.style.display = 'none';
         }
     }
     
@@ -760,6 +822,8 @@ function populateGeschenkModal() {
 
 function selectGeschenkTarget(cardIdx) {
     const gid = sessionStorage.getItem('gameId');
+    if (statusMessageEl) statusMessageEl.textContent = 'Geschenk wird gespielt...';
+    console.log('GESCHENK select index', cardIdx);
     const payload = {
         game_id: gid,
         card_index: pendingGeschenkCardIndex,

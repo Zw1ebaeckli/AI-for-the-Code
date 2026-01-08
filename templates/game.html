@@ -31,22 +31,7 @@
                 <span class="opponent-count" id="opponentCount"></span>
             </div>
 
-            <!-- Left Sidebar Legal Moves Display -->
-            <aside class="moves-sidebar">
-                <div class="moves-panel">
-                    <div class="moves-window">
-                        <div class="moves-window-header">
-                            <div class="moves-window-title">ZÜGE</div>
-                            <div class="moves-window-dots"><span></span><span></span><span></span></div>
-                        </div>
-                        <div class="moves-window-body">
-                            <div class="moves-list" id="movesList">
-                                <!-- Legal moves will be populated here -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </aside>
+            
 
             <!-- Center Game Area -->
             <div class="center-area">
@@ -89,7 +74,6 @@
                     <!-- Player's cards (sorted and overlapping) -->
                 </div>
                 <button class="sum-mode-toggle" id="sumModeToggle" title="Summen-Modus aktivieren/deaktivieren">
-                    <span class="sum-mode-icon">➕</span>
                     <span class="sum-mode-text">SUMME</span>
                 </button>
             </div>
@@ -130,6 +114,7 @@
                 <div class="tausch-option" data-target="number">
                     <div class="tausch-option-label">Zahlenkarte</div>
                     <div class="tausch-option-desc">Oberste Karte vom Zahlenablagestapel</div>
+                    <div class="tausch-option-preview"><img id="tauschNumberPreviewImg" alt="Top Zahl" /></div>
                 </div>
                 <div class="tausch-cards-grid" id="tauschCardsGrid">
                     <!-- Action cards will be populated here -->
@@ -137,6 +122,7 @@
                 <div class="tausch-option" id="tauschActionOption" data-target="action">
                     <div class="tausch-option-label">Aktionskarte</div>
                     <div class="tausch-option-desc" id="tauschActionPreview">Oberste Karte vom Aktionsstapel</div>
+                    <div class="tausch-option-preview"><img id="tauschActionPreviewImg" alt="Top Aktion" /></div>
                 </div>
             </div>
         </div>
