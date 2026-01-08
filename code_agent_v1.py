@@ -363,12 +363,17 @@ def apply_move(state: GameState, move_type: str, payload: Tuple) -> GameState:
 
         elif action == "GESCHENK":
             target_idx = payload[1]
-            # Reveal one card from each opponent (choose highest match potential)
-            gift_card = choose_best_gift(state, target_idx)
+            opp = state.players[target_idx]
+            gift_card = None
+            # If player specified a card index, use it; otherwise fall back to best
+            if len(payload) > 2:
+                idx = payload[2]
+                if 0 <= idx < len(opp.hand):
+                    gift_card = opp.hand[idx]
+            if gift_card is None:
+                gift_card = choose_best_gift(state, target_idx)
             if gift_card:
                 # Transfer chosen card; target draws a replacement
-                opp = state.players[target_idx]
-                # Remove from opponent hand by identity
                 for k, hcard in enumerate(opp.hand):
                     if hcard is gift_card:
                         opp.hand.pop(k)

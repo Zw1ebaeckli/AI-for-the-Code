@@ -21,10 +21,32 @@
 
         <!-- Main Game Board -->
         <main class="game-board">
+            <!-- Opponent Move Notification -->
+            <div class="opponent-notification" id="opponentNotification">
+                <span class="notification-text"></span>
+            </div>
+            
             <!-- Opponent hand backs across the top -->
             <div class="opponent-hand" id="opponentHand">
                 <span class="opponent-count" id="opponentCount"></span>
             </div>
+
+            <!-- Left Sidebar Legal Moves Display -->
+            <aside class="moves-sidebar">
+                <div class="moves-panel">
+                    <div class="moves-window">
+                        <div class="moves-window-header">
+                            <div class="moves-window-title">ZÜGE</div>
+                            <div class="moves-window-dots"><span></span><span></span><span></span></div>
+                        </div>
+                        <div class="moves-window-body">
+                            <div class="moves-list" id="movesList">
+                                <!-- Legal moves will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
 
             <!-- Center Game Area -->
             <div class="center-area">
@@ -40,6 +62,7 @@
 
                     <!-- Action Card Discard Pile -->
                     <div class="pile-container">
+                        <div class="pile-label">AKTION</div>
                         <div class="action-discard" id="actionDiscard">
                             <!-- Action cards discard pile -->
                         </div>
@@ -47,6 +70,7 @@
 
                     <!-- Regular Discard Pile -->
                     <div class="pile-container">
+                        <div class="pile-label">ABLEGEN</div>
                         <div class="discard-pile" id="discardPile">
                             <!-- Top discard card -->
                         </div>
@@ -64,6 +88,10 @@
                 <div class="player-hand" id="playerHand">
                     <!-- Player's cards (sorted and overlapping) -->
                 </div>
+                <button class="sum-mode-toggle" id="sumModeToggle" title="Summen-Modus aktivieren/deaktivieren">
+                    <span class="sum-mode-icon">➕</span>
+                    <span class="sum-mode-text">SUMME</span>
+                </button>
             </div>
         </main>
 
@@ -89,6 +117,48 @@
                 </div>
             </div>
         </aside>
+    </div>
+
+    <!-- TAUSCH Card Selection Modal -->
+    <div class="tausch-modal" id="tauschModal">
+        <div class="tausch-modal-content">
+            <div class="tausch-modal-header">
+                <h3>TAUSCH - Karte wählen</h3>
+                <button class="tausch-modal-close" id="tauschModalClose">×</button>
+            </div>
+            <div class="tausch-modal-body">
+                <div class="tausch-option" data-target="number">
+                    <div class="tausch-option-label">Zahlenkarte</div>
+                    <div class="tausch-option-desc">Oberste Karte vom Zahlenablagestapel</div>
+                </div>
+                <div class="tausch-cards-grid" id="tauschCardsGrid">
+                    <!-- Action cards will be populated here -->
+                </div>
+                <div class="tausch-option" id="tauschActionOption" data-target="action">
+                    <div class="tausch-option-label">Aktionskarte</div>
+                    <div class="tausch-option-desc" id="tauschActionPreview">Oberste Karte vom Aktionsstapel</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GESCHENK Card Selection Modal -->
+    <div class="tausch-modal" id="geschenkModal">
+        <div class="tausch-modal-content">
+            <div class="tausch-modal-header">
+                <h3>GESCHENK - Karte wählen</h3>
+                <button class="tausch-modal-close" id="geschenkModalClose">×</button>
+            </div>
+            <div class="tausch-modal-body">
+                <div class="tausch-option" style="margin-bottom: 0.5rem;">
+                    <div class="tausch-option-label">Gegnerische Hand</div>
+                    <div class="tausch-option-desc">Wähle eine Karte zum Nehmen</div>
+                </div>
+                <div class="tausch-cards-grid" id="geschenkCardsGrid">
+                    <!-- Opponent cards injected here -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
