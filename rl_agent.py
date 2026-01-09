@@ -1,7 +1,31 @@
 # Author: Jasmin Furler
 """
 Reinforcement Learning Agent for CODE card game.
-Uses Q-learning with function approximation.
+Uses Double Q-learning with function approximation.
+
+DOUBLE Q-LEARNING:
+Standard Q-learning suffers from overestimation bias because it uses the same
+values to select and evaluate actions (max operator). This leads to overly
+optimistic Q-values and can hurt performance.
+
+Double Q-Learning fixes this by:
+1. Maintaining TWO Q-tables (Q_A and Q_B)
+2. For each update, randomly choosing which table to update
+3. Using one table to SELECT the best action, the other to EVALUATE it
+
+Example:
+- Update Q_A: use Q_A to find argmax_a Q_A(s',a), then use Q_B(s', a*) as value
+- Update Q_B: use Q_B to find argmax_a Q_B(s',a), then use Q_A(s', a*) as value
+
+This decoupling reduces overestimation and leads to more stable, accurate learning.
+
+ADDITIONAL FEATURES:
+- Optimistic initialization (encourages exploration)
+- Adaptive learning rate (decreases with visit count)
+- Experience replay (learns from stored transitions)
+- Curriculum learning (easy -> hard opponents)
+- Phase-aware rewards (endgame urgency)
+- Enhanced state features (10 strategic indicators)
 """
 
 import random
@@ -154,8 +178,9 @@ def get_action_features(move_type: str, payload: Tuple, game: GameState, player_
 
 class QLearningAgent:
     """
-    Q-learning agent with state-action value function.
-    Enhanced with optimistic initialization and adaptive learning.
+    Double Q-learning agent with state-action value function.
+    Uses two Q-tables to reduce overestimation bias.
+    Enhanced with optimistic initialization, adaptive learning, and experience replay.
     """
     
     def __init__(self, alpha: float = 0.1, gamma: float = 0.95, epsilon: float = 0.2, 
@@ -172,7 +197,11 @@ class QLearningAgent:
         self.gamma = gamma
         self.epsilon = epsilon
         self.optimistic_init = optimistic_init
-        self.q_table: Dict[Tuple, float] = defaultdict(lambda: optimistic_init)
+        
+        # Double Q-Learning: maintain two Q-tables
+        self.q_table_a: Dict[Tuple, float] = defaultdict(lambda: optimistic_init)
+        self.q_table_b: Dict[Tuple, float] = defaultdict(lambda: optimistic_init)
+        
         self.training = True
         self.visit_counts: Dict[Tuple, int] = defaultdict(int)
         
@@ -180,9 +209,21 @@ class QLearningAgent:
         self.replay_buffer = deque(maxlen=replay_size)
         self.replay_batch_size = 32
         
-    def get_q_value(self, state: Tuple, action: Tuple) -> float:
-        """Get Q-value for state-action pair."""
-        return self.q_table[(state, action)]
+    def get_q_value(self, state: Tuple, action: Tuple, table: str = 'avg') -> float:
+        """
+        Get Q-value for state-action pair.
+        
+        Args:
+            state: State tuple
+            action: Action tuple
+            table: Which table to use ('a', 'b', or 'avg' for average)
+        """
+        if table == 'a':
+            return self.q_table_a[(state, action)]
+        elif table == 'b':
+            return self.q_table_b[(state, action)]
+        else:  # Average of both tables (default for action selection)
+            return (self.q_table_a[(state, action)] + self.q_table_b[(state, action)]) / 2
     
     def choose_action(self, game: GameState) -> Tuple[str, Tuple]:
         """
@@ -249,7 +290,9 @@ class QLearningAgent:
     def _update_q_value(self, state: Tuple, action: Tuple, reward: float, next_state: Tuple,
                         next_moves: List[Tuple[str, Tuple]], game: GameState, done: bool):
         """
-        Internal Q-value update with adaptive learning rate.
+        Double Q-Learning update with adaptive learning rate.
+        Randomly updates one of the two Q-tables, using the other to evaluate.
+        This reduces overestimation bias.
         """
         # Track visits
         sa_pair = (state, action)
@@ -258,37 +301,89 @@ class QLearningAgent:
         # Adaptive learning rate (decreases with visits for stability)
         visit_count = self.visit_counts[sa_pair]
         adaptive_alpha = self.alpha / (1 + 0.01 * visit_count)
-            
-        current_q = self.get_q_value(state, action)
+        
+        # Randomly choose which Q-table to update (Double Q-Learning)
+        update_a = random.random() < 0.5
         
         if done:
             target = reward
         else:
-            # Find max Q for next state
-            max_next_q = float('-inf')
+            # Double Q-Learning: decouple action selection from evaluation
             idx = game.active_idx
-            for move_type, payload in next_moves:
-                next_action = get_action_features(move_type, payload, game, idx)
-                max_next_q = max(max_next_q, self.get_q_value(next_state, next_action))
-            if max_next_q == float('-inf'):
-                max_next_q = 0
+            
+            if update_a:
+                # Update Q_A: use Q_A to select action, Q_B to evaluate
+                best_action = None
+                best_q_a = float('-inf')
+                for move_type, payload in next_moves:
+                    next_action = get_action_features(move_type, payload, game, idx)
+                    q_a = self.q_table_a[(next_state, next_action)]
+                    if q_a > best_q_a:
+                        best_q_a = q_a
+                        best_action = next_action
+                
+                # Evaluate best action using Q_B
+                if best_action is not None:
+                    max_next_q = self.q_table_b[(next_state, best_action)]
+                else:
+                    max_next_q = 0
+            else:
+                # Update Q_B: use Q_B to select action, Q_A to evaluate
+                best_action = None
+                best_q_b = float('-inf')
+                for move_type, payload in next_moves:
+                    next_action = get_action_features(move_type, payload, game, idx)
+                    q_b = self.q_table_b[(next_state, next_action)]
+                    if q_b > best_q_b:
+                        best_q_b = q_b
+                        best_action = next_action
+                
+                # Evaluate best action using Q_A
+                if best_action is not None:
+                    max_next_q = self.q_table_a[(next_state, best_action)]
+                else:
+                    max_next_q = 0
+            
             target = reward + self.gamma * max_next_q
         
-        # Update Q-value with adaptive learning rate
-        self.q_table[(state, action)] = current_q + adaptive_alpha * (target - current_q)
+        # Update the chosen Q-table
+        if update_a:
+            current_q = self.q_table_a[(state, action)]
+            self.q_table_a[(state, action)] = current_q + adaptive_alpha * (target - current_q)
+        else:
+            current_q = self.q_table_b[(state, action)]
+            self.q_table_b[(state, action)] = current_q + adaptive_alpha * (target - current_q)
     
     def save(self, filepath: str):
-        """Save Q-table to file."""
+        """Save both Q-tables to file."""
+        save_data = {
+            'q_table_a': dict(self.q_table_a),
+            'q_table_b': dict(self.q_table_b),
+            'visit_counts': dict(self.visit_counts)
+        }
         with open(filepath, 'wb') as f:
-            pickle.dump(dict(self.q_table), f)
-        print(f"Saved {len(self.q_table)} Q-values to {filepath}")
+            pickle.dump(save_data, f)
+        print(f"Saved {len(self.q_table_a)} Q-values (table A) and {len(self.q_table_b)} Q-values (table B) to {filepath}")
     
     def load(self, filepath: str):
-        """Load Q-table from file."""
+        """Load both Q-tables from file."""
         try:
             with open(filepath, 'rb') as f:
-                self.q_table = defaultdict(float, pickle.load(f))
-            print(f"Loaded {len(self.q_table)} Q-values from {filepath}")
+                save_data = pickle.load(f)
+            
+            # Handle both old (single table) and new (double table) formats
+            if isinstance(save_data, dict) and 'q_table_a' in save_data:
+                # New format with double Q-tables
+                self.q_table_a = defaultdict(lambda: self.optimistic_init, save_data['q_table_a'])
+                self.q_table_b = defaultdict(lambda: self.optimistic_init, save_data['q_table_b'])
+                if 'visit_counts' in save_data:
+                    self.visit_counts = defaultdict(int, save_data['visit_counts'])
+                print(f"Loaded {len(self.q_table_a)} Q-values (table A) and {len(self.q_table_b)} Q-values (table B) from {filepath}")
+            else:
+                # Old format with single table - duplicate to both tables
+                self.q_table_a = defaultdict(lambda: self.optimistic_init, save_data)
+                self.q_table_b = defaultdict(lambda: self.optimistic_init, save_data)
+                print(f"Loaded {len(self.q_table_a)} Q-values from legacy format to both tables")
         except FileNotFoundError:
             print(f"No saved model found at {filepath}, starting fresh.")
 
@@ -485,11 +580,11 @@ def train_agent(agent: QLearningAgent, opponent, n_episodes: int = 1000,
                     "loss_rate": loss_rate,
                     "timeout_rate": timeout_rate,
                     "epsilon": agent.epsilon,
-                    "q_size": len(agent.q_table),
+                    "q_size": len(agent.q_table_a) + len(agent.q_table_b),
                 })
             if verbose:
                 print(f"Episode {episode+1:4d} | Win: {win_rate:5.1%} | Loss: {loss_rate:5.1%} | "
-                      f"Timeout: {timeout_rate:5.1%} | Q-size: {len(agent.q_table)} | ε: {agent.epsilon:.3f}")
+                      f"Timeout: {timeout_rate:5.1%} | Q-size: {len(agent.q_table_a)+len(agent.q_table_b)} | ε: {agent.epsilon:.3f}")
             wins = losses = timeouts = 0
     
     return agent
@@ -613,11 +708,11 @@ def train_agent_mixed(agent: QLearningAgent,
                     "loss_rate": loss_rate,
                     "timeout_rate": timeout_rate,
                     "epsilon": agent.epsilon,
-                    "q_size": len(agent.q_table),
+                    "q_size": len(agent.q_table_a) + len(agent.q_table_b),
                 })
             if verbose:
                 print(f"[Mixed] Episode {episode+1:4d} | Win: {win_rate:5.1%} | Loss: {loss_rate:5.1%} | "
-                      f"Timeout: {timeout_rate:5.1%} | Q-size: {len(agent.q_table)} | ε: {agent.epsilon:.3f}")
+                      f"Timeout: {timeout_rate:5.1%} | Q-size: {len(agent.q_table_a)+len(agent.q_table_b)} | ε: {agent.epsilon:.3f}")
             wins = losses = timeouts = 0
 
     return agent
@@ -737,14 +832,18 @@ def print_reward_table():
 
 
 if __name__ == "__main__":
+    print("=" * 60)
+    print("DOUBLE Q-LEARNING AGENT TRAINING")
+    print("Reduces overestimation bias for more stable learning")
+    print("=" * 60)
     print_reward_table()
 
-    # Hyperparameters for training schedule
-    alpha = 0.25       # Boosted learning rate for faster convergence with replay
+    # Hyperparameters optimized for Double Q-Learning
+    alpha = 0.3        # Higher learning rate (Double Q is more stable)
     gamma = 0.99       # Very high discount for long-term strategy
-    epsilon = 0.35     # Higher initial exploration
-    optimistic_init = 15.0  # Higher optimism to encourage thorough exploration
-    replay_size = 15000     # Larger replay buffer for better sampling
+    epsilon = 0.4      # Higher initial exploration (reduced bias allows more)
+    optimistic_init = 20.0  # Higher optimism (Double Q handles it better)
+    replay_size = 20000     # Larger replay buffer
 
     agent = QLearningAgent(alpha=alpha, gamma=gamma, epsilon=epsilon, 
                           optimistic_init=optimistic_init, replay_size=replay_size)
