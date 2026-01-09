@@ -228,6 +228,65 @@ def setup_game(num_players: int, enable_reset: bool = True) -> GameState:
     )
     return state
 
+def can_card_be_played(card: Card, state: GameState) -> bool:
+    """Check if a single card can be immediately played given the current game state.
+    Returns True if the card matches (by color, value, or sum) the top discard."""
+    top_num = state.number_discard[-1] if state.number_discard else None
+    
+    if card.kind == "NUMBER" and top_num:
+        # Can play if color or value matches
+        if card.color == top_num.color or card.value == top_num.value:
+            return True
+    
+    if card.kind == "ACTION" and card.action != "JOKER":
+        # Action cards can always be played (no match required)
+        return True
+    
+    return False
+
+
+def find_playable_moves_for_card(card: Card, state: GameState) -> List[Tuple[str, Tuple]]:
+    """Find all valid moves for a specific card in the current state.
+    Useful for immediately playing a drawn card."""
+    moves = []
+    top_num = state.number_discard[-1] if state.number_discard else None
+    player = state.players[state.active_idx]
+    
+    if card.kind == "NUMBER":
+        if top_num:
+            # Check for direct match (color or value)
+            if card.color == top_num.color or card.value == top_num.value:
+                moves.append(("PlayNumber", (card,)))
+            
+            # Check if this card can form a sum with another card in hand
+            target_sum = top_num.value
+            for other in player.hand:
+                if other is not card and other.kind == "NUMBER":
+                    if other.value is not None and card.value is not None and target_sum is not None:
+                        if (other.value + card.value) == target_sum:
+                            moves.append(("PlaySum", (other, card)))
+    
+    elif card.kind == "ACTION" and card.action != "JOKER":
+        # Action cards can always be played
+        if card.action == "TAUSCH":
+            if state.number_discard:
+                moves.append(("PlayAction", (card, "number")))
+            if state.action_discard:
+                moves.append(("PlayAction", (card, "action")))
+        elif card.action == "GESCHENK":
+            for opp_idx in range(len(state.players)):
+                if opp_idx != state.active_idx:
+                    moves.append(("PlayAction", (card, opp_idx)))
+        elif card.action == "RESET" and state.enable_reset:
+            for opp_idx in range(len(state.players)):
+                if opp_idx != state.active_idx:
+                    moves.append(("PlayAction", (card, opp_idx)))
+        else:
+            moves.append(("PlayAction", (card,)))
+    
+    print(f"find_playable_moves_for_card: card={card}, top_num={top_num}, moves found={len(moves)}")
+    return moves
+
 def legal_moves(state: GameState) -> List[Tuple[str, Tuple]]:
     """Compute legal moves for active player. Returns list of (move_type, payload)."""
     moves: List[Tuple[str, Tuple]] = []
@@ -286,13 +345,8 @@ def legal_moves(state: GameState) -> List[Tuple[str, Tuple]]:
             else:
                 moves.append(("PlayAction", (c,)))
 
-    # HOUSE RULE: If no number/sum/action plays available, allow playing ANY number card
-    # This prevents deadlock where players have no matching cards
-    has_play_moves = len(moves) > 0
-    if not has_play_moves:
-        for c in player.hand:
-            if c.kind == "NUMBER":
-                moves.append(("PlayAny", (c,)))
+    # Removed "PlayAny" fallback to enforce strict legality.
+    # Players must draw/pass when no legal number/sum/action moves exist.
 
     # Draw is always allowed if draw_pile not empty
     if state.draw_pile:

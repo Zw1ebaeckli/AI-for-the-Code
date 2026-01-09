@@ -13,7 +13,8 @@ from typing import Dict, Any
 # Game logic imports
 from code_agent_v1 import (
     setup_game, legal_moves, apply_move, end_if_win, is_win,
-    next_player_index, agent_decide_move, Card, GameState
+    next_player_index, agent_decide_move, Card, GameState,
+    can_card_be_played, find_playable_moves_for_card
 )
 from rl_agent import QLearningAgent
 
@@ -25,6 +26,8 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 games: Dict[str, Dict[str, Any]] = {}
 # Map each connected client to its game id for targeted updates
 client_to_game: Dict[str, str] = {}
+# Track games where player is deciding on drawn card play
+drawn_card_pending: Dict[str, Card] = {}
 
 @app.route('/')
 def index():
@@ -204,24 +207,66 @@ def draw_card(data=None):
     gid = (data or {}).get('game_id') if isinstance(data, dict) else None
     if not gid:
         gid = client_to_game.get(request.sid)
+    print(f"draw_card called, gid={gid}")
     if not gid or gid not in games:
+        print(f"Game not found for gid={gid}")
         return
     game = games[gid]
     state: GameState = game['state']
     if state.active_idx != 0:
         # Not player's turn; just send current state back
+        print(f"Not player's turn, active_idx={state.active_idx}")
         emit('game_state', serialize_state(state), to=gid)
         return
+    
+    # Track the drawn card for potential immediate play
+    drawn_card = None
+    
     # Handle PLUS2: draw multiple times if pending
     if state.pending_plus2 > 0:
         draws = state.pending_plus2
-        for _ in range(draws):
+        for i in range(draws):
             state = apply_move(state, 'Draw', ())
+            # Store the last drawn card for checking immediate play
+            if i == draws - 1:
+                drawn_card = state.players[0].hand[-1]
         state.pending_plus2 = 0
     else:
         # Normal single draw
         state = apply_move(state, 'Draw', ())
-    # Advance turn
+        drawn_card = state.players[0].hand[-1]
+    
+    print(f"\n=== DREW CARD: {drawn_card} ===")
+    
+    # Check if the drawn card can be played immediately
+    playable_moves = find_playable_moves_for_card(drawn_card, state) if drawn_card else []
+    print(f"Found {len(playable_moves)} playable moves")
+    
+    # Only pause and emit modal if card is playable
+    if playable_moves:
+        # Card is playable - pause game and let player decide
+        game['state'] = state
+        drawn_card_pending[gid] = drawn_card
+        
+        print(f"Emitting game_state to room {gid}")
+        emit('game_state', serialize_state(state), to=gid)
+        
+        print(f"Emitting card_drawn event with play options")
+        available_moves_data = [
+            {'move_type': mt, 'has_payload': len(p) > 0} 
+            for mt, p in playable_moves
+        ]
+        
+        emit('card_drawn', {
+            'card': serialize_card(drawn_card),
+            'is_playable': True,
+            'available_moves': available_moves_data
+        }, to=gid)
+        print(f"=== WAITING FOR PLAYER DECISION ===\n")
+        return
+    
+    # Card is NOT playable - advance turn normally
+    print("Card not playable - advancing turn")
     state.active_idx = next_player_index(state, steps=1)
     state, winner = end_if_win(state)
     game['state'] = state
@@ -238,6 +283,107 @@ def draw_card(data=None):
             }, to=gid)
         else:
             emit('game_over', {'winner': 'player'}, to=gid)
+
+@socketio.on('play_drawn_card')
+def play_drawn_card(data=None):
+    """Handle immediate play of a drawn card."""
+    data = data or {}
+    gid = data.get('game_id') or client_to_game.get(request.sid)
+    if not gid or gid not in games:
+        return
+    game = games[gid]
+    state: GameState = game['state']
+    
+    # Clear pending drawn card flag
+    drawn_card_pending.pop(gid, None)
+    
+    if state.active_idx != 0:
+        emit('game_state', serialize_state(state), to=gid)
+        return
+    
+    move_type = data.get('move_type')
+    card = data.get('card')
+    
+    if not move_type or not card:
+        emit('game_state', serialize_state(state), to=gid)
+        return
+    
+    player = state.players[0]
+    # Find the drawn card in player's hand
+    drawn_card = None
+    for c in player.hand:
+        if serialize_card(c) == card:
+            drawn_card = c
+            break
+    
+    if not drawn_card:
+        emit('game_state', serialize_state(state), to=gid)
+        return
+    
+    # Handle the move based on type
+    if move_type == 'PlayNumber':
+        state = apply_move(state, 'PlayNumber', (drawn_card,))
+    elif move_type == 'PlayAction':
+        state = apply_move(state, 'PlayAction', (drawn_card,))
+    else:
+        emit('game_state', serialize_state(state), to=gid)
+        return
+    
+    # Advance turn
+    state.active_idx = next_player_index(state, steps=1)
+    state, winner = end_if_win(state)
+    game['state'] = state
+    
+    # Bot plays
+    winner = play_bot_until_player(game, gid)
+    emit('game_state', serialize_state(game['state']), to=gid)
+    
+    if winner is not None:
+        if winner == 1:
+            opp = game['state'].players[1]
+            emit('game_over', {
+                'winner': 'opponent',
+                'opponent_hand': [serialize_card(c) for c in opp.hand],
+                'opponent_code': list(opp.code.target)
+            }, to=gid)
+        else:
+            emit('game_over', {'winner': 'player'}, to=gid)
+
+
+@socketio.on('drawn_card_add_to_hand')
+def drawn_card_add_to_hand(data=None):
+    """Player decides not to play the drawn card immediately."""
+    data = data or {}
+    gid = data.get('game_id') or client_to_game.get(request.sid)
+    if not gid or gid not in games:
+        return
+    
+    # Clear pending drawn card flag
+    drawn_card_pending.pop(gid, None)
+    
+    game = games[gid]
+    state: GameState = game['state']
+    
+    # Advance turn (drawn card stays in hand)
+    state.active_idx = next_player_index(state, steps=1)
+    state, winner = end_if_win(state)
+    game['state'] = state
+    
+    # Bot plays
+    winner = play_bot_until_player(game, gid)
+    emit('game_state', serialize_state(game['state']), to=gid)
+    
+    if winner is not None:
+        if winner == 1:
+            opp = game['state'].players[1]
+            emit('game_over', {
+                'winner': 'opponent',
+                'opponent_hand': [serialize_card(c) for c in opp.hand],
+                'opponent_code': list(opp.code.target)
+            }, to=gid)
+        else:
+            emit('game_over', {'winner': 'player'}, to=gid)
+
 
 @socketio.on('play_card')
 def play_card(data=None):
@@ -419,6 +565,11 @@ def get_legal_moves_handler(data=None):
     player = state.players[0]
     
     # Format moves for client
+    def index_by_identity(lst, target):
+        for i, obj in enumerate(lst):
+            if obj is target:
+                return i
+        return -1
     formatted_moves = []
     for idx, (move_type, payload) in enumerate(legals):
         move_data = {
@@ -430,16 +581,14 @@ def get_legal_moves_handler(data=None):
         # Include card indices for reference
         if move_type in ('PlayNumber', 'PlayAny', 'PlayAction'):
             card = payload[0]
-            try:
-                card_idx = player.hand.index(card)
-                move_data['card_index'] = card_idx
-            except ValueError:
-                pass
+            idx = index_by_identity(player.hand, card)
+            if idx != -1:
+                move_data['card_index'] = idx
         elif move_type == 'PlaySum':
-            try:
-                move_data['card_indices'] = [player.hand.index(payload[0]), player.hand.index(payload[1])]
-            except ValueError:
-                pass
+            a_idx = index_by_identity(player.hand, payload[0])
+            b_idx = index_by_identity(player.hand, payload[1])
+            if a_idx != -1 and b_idx != -1:
+                move_data['card_indices'] = [a_idx, b_idx]
         
         formatted_moves.append(move_data)
     

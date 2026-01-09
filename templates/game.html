@@ -19,6 +19,74 @@
             <button class="btn-menu" onclick="window.location.href='/'">← MENU</button>
         </div>
 
+        <!-- Left Sidebar Game Mechanics -->
+        <aside class="mechanics-sidebar">
+            <div class="code-card-panel">
+                <div class="code-window collapsed" id="mechanicsWindow">
+                    <div class="code-window-header">
+                        <div class="code-window-title">SPIELMECHANIK</div>
+                        <div class="code-window-dots" id="mechanicsToggle"><span></span><span></span><span></span></div>
+                    </div>
+                    <div class="code-window-body">
+                        <div class="mechanics-content">
+                            <p class="mechanics-intro">Ziel: Code-Karte erfüllen durch Sammeln der abgebildeten Zahlenkarten.</p>
+                            
+                            <p class="mechanics-subtitle">Drei Zugmöglichkeiten:</p>
+                            <ol class="mechanics-list">
+                                <li>1-2 Karten ablegen</li>
+                                <li>Aktionskarte spielen</li>
+                                <li>Karte ziehen</li>
+                            </ol>
+                            
+                            <div class="mechanics-section">
+                                <h4>Karten ablegen</h4>
+                                <p>Einzelkarte: gleiche Farbe oder Zahl. Zwei Karten: Summe muss passen (Summe-Knopf). Die zweite Karte bestimmt neue Farbe/Wert.</p>
+                            </div>
+                            
+                            <div class="mechanics-section">
+                                <h4>Aktionskarten</h4>
+                                
+                                <div class="action-desc">
+                                    <strong>+2</strong>
+                                    <p>Gegner zieht 2 Karten oder spielt eigene +2.</p>
+                                </div>
+                                
+                                <div class="action-desc">
+                                    <strong>Tausch</strong>
+                                    <p>Nimm oberste Karte vom Zahlen- oder Aktionsstapel.</p>
+                                </div>
+                                
+                                <div class="action-desc">
+                                    <strong>Richtungswechsel</strong>
+                                    <p>Spielrichtung wechselt.</p>
+                                </div>
+                                
+                                <div class="action-desc">
+                                    <strong>Geschenk</strong>
+                                    <p>Sehe Gegnerkarten, nimm eine. Gegner zieht nach.</p>
+                                </div>
+                                
+                                <div class="action-desc">
+                                    <strong>Aussetzen</strong>
+                                    <p>Nächster Spieler wird übersprungen.</p>
+                                </div>
+                                
+                                <div class="action-desc">
+                                    <strong>Reset</strong>
+                                    <p>Gegner-CodeKarte wird zurückgesetzt.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="mechanics-section">
+                                <h4>Karte ziehen</h4>
+                                <p>Passende Karte kann sofort gespielt werden.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
         <!-- Main Game Board -->
         <main class="game-board">
             <!-- Opponent Move Notification -->
@@ -82,10 +150,10 @@
         <!-- Right Sidebar Code Card Display -->
         <aside class="code-card-sidebar">
             <div class="code-card-panel">
-                <div class="code-window">
+                <div class="code-window" id="codeCardWindow">
                     <div class="code-window-header">
                         <div class="code-window-title">CODEKARTE</div>
-                        <div class="code-window-dots"><span></span><span></span><span></span></div>
+                        <div class="code-window-dots" id="codeCardToggle"><span></span><span></span><span></span></div>
                     </div>
                     <div class="code-window-body">
                         <div class="code-card-visual" id="playerCodeCard">
@@ -123,6 +191,32 @@
                     <div class="tausch-option-label">Aktionskarte</div>
                     <div class="tausch-option-desc" id="tauschActionPreview">Oberste Karte vom Aktionsstapel</div>
                     <div class="tausch-option-preview"><img id="tauschActionPreviewImg" alt="Top Aktion" /></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Drawn Card Immediate Play Modal -->
+    <div class="tausch-modal" id="drawnCardModal">
+        <div class="tausch-modal-content" style="max-width: 600px;">
+            <div class="tausch-modal-header">
+                <h3>Gezogene Karte - Sofort spielbar!</h3>
+                <button class="tausch-modal-close" id="drawnCardModalClose">×</button>
+            </div>
+            <div class="tausch-modal-body" style="text-align: center;">
+                <div style="margin-bottom: 2rem;">
+                    <p style="font-size: 1.1rem; margin-bottom: 1rem;">Du hast eine Karte gezogen, die du sofort spielen kannst:</p>
+                    <div id="drawnCardDisplay" style="display: inline-block; margin-bottom: 1.5rem;">
+                        <!-- Drawn card image will be inserted here -->
+                    </div>
+                </div>
+                <div id="drawnCardPlayOptions" style="display: flex; flex-direction: column; gap: 1rem; align-items: center;">
+                    <!-- Play options (direct play or sum) will be inserted here -->
+                </div>
+                <div style="margin-top: 2rem; border-top: 1px solid #ccc; padding-top: 1rem;">
+                    <button id="drawnCardAddToHandBtn" class="action-button" style="width: 100%; padding: 0.75rem; background: #666;">
+                        Zur Hand hinzufügen (nicht spielen)
+                    </button>
                 </div>
             </div>
         </div>

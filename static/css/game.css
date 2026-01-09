@@ -465,11 +465,122 @@ body.game-screen {
     z-index: 10;
 }
 
+/* Mechanics Sidebar (Left) */
+.mechanics-sidebar {
+    position: fixed;
+    left: 2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+
+.mechanics-sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.mechanics-sidebar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.mechanics-sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+}
+
+.mechanics-sidebar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.mechanics-content {
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: #1a1a1a;
+}
+
+.mechanics-intro {
+    margin-bottom: 0.75rem;
+    font-weight: 500;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.mechanics-subtitle {
+    font-weight: 600;
+    margin: 0.75rem 0 0.4rem 0;
+    color: #2b2829;
+    font-size: 0.82rem;
+}
+
+.mechanics-list {
+    margin: 0.4rem 0 0.75rem 1.2rem;
+    padding: 0;
+}
+
+.mechanics-list li {
+    margin-bottom: 0.2rem;
+}
+
+.mechanics-section {
+    margin-bottom: 0.85rem;
+}
+
+.mechanics-section h4 {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: 0.82rem;
+    color: #667eea;
+    margin: 0 0 0.4rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.action-desc {
+    margin-bottom: 0.5rem;
+    padding-left: 0.6rem;
+    border-left: 2px solid rgba(102, 126, 234, 0.3);
+}
+
+.action-desc strong {
+    display: block;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    color: #764ba2;
+    margin-bottom: 0.15rem;
+}
+
+.action-desc p {
+    margin: 0;
+    font-size: 0.78rem;
+}
+
 .code-card-panel { width: 280px; }
 
-.code-card-sidebar.collapsed {
+.mechanics-sidebar .code-card-panel { width: 480px; }
+
+/* Collapsed state for the code window (only header visible) */
+.code-window.collapsed .code-window-body {
+    max-height: 0px;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+}
+
+/* Move collapsed sidebars to bottom */
+.code-card-sidebar:has(.code-window.collapsed) {
     top: auto;
-    bottom: 0.75rem;
+    bottom: 2rem;
+    transform: none;
+}
+
+.mechanics-sidebar:has(.code-window.collapsed) {
+    top: auto;
+    bottom: 2rem;
     transform: none;
 }
 
@@ -555,14 +666,6 @@ body.game-screen {
     color: #111;
 }
 .code-display-inline .has-card { color: #00ff90; text-shadow: 0 0 8px rgba(0,255,144,0.5); }
-
-/* Collapsed state for the code window (only header visible) */
-.code-window.collapsed .code-window-body {
-    max-height: 0px;
-    padding-top: 0;
-    padding-bottom: 0;
-    opacity: 0;
-}
 
 /* Card animations */
 @keyframes cardPlaySlide {
