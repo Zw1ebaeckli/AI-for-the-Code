@@ -224,6 +224,11 @@ socket.on('opponent_move', (data) => {
         const state = data.state;
         const moveDescription = data.move_description || 'Gegner hat eine Aktion durchgeführt';
         
+        // Handle GESCHENK animation if present
+        if (data.geschenk_data && data.geschenk_data.taken_card) {
+            animateGeschenkEffect(data.geschenk_data.taken_card);
+        }
+        
         // Show notification
         showOpponentNotification(moveDescription);
         
@@ -910,6 +915,7 @@ function showTauschModal(cardIndex) {
     const modal = document.getElementById('tauschModal');
     const cardsGrid = document.getElementById('tauschCardsGrid');
     const actionOption = document.getElementById('tauschActionOption');
+    const numberOption = document.querySelector('.tausch-option[data-target="number"], .tausch-option');
     const actionPreview = document.getElementById('tauschActionPreview');
     const numberPreviewImg = document.getElementById('tauschNumberPreviewImg');
     const actionPreviewImg = document.getElementById('tauschActionPreviewImg');
@@ -937,19 +943,19 @@ function showTauschModal(cardIndex) {
         }
     }
 
-    // Handle top number card preview
+    // Handle top number card preview and availability (must have >1 card to take)
+    const hasNumber = Array.isArray(gameState.number_discard) && gameState.number_discard.length > 1;
     if (numberPreviewImg) {
-        const hasNumber = Array.isArray(gameState.number_discard) && gameState.number_discard.length > 0;
         if (hasNumber) {
             const topNum = gameState.number_discard[gameState.number_discard.length - 1];
             numberPreviewImg.src = getCardImagePath(topNum);
             numberPreviewImg.style.display = 'block';
-        } else if (gameState.discard_top) {
-            numberPreviewImg.src = getCardImagePath(gameState.discard_top);
-            numberPreviewImg.style.display = 'block';
         } else {
             numberPreviewImg.style.display = 'none';
         }
+    }
+    if (numberOption) {
+        numberOption.classList.toggle('disabled', !hasNumber);
     }
     
     // Populate with action discard pile cards
@@ -969,6 +975,14 @@ function showTauschModal(cardIndex) {
 }
 
 function selectTauschTarget(target, actionIndex = null) {
+    // Prevent picking number discard if only one card is present
+    if (target === 'number') {
+        const hasNumber = Array.isArray(gameState.number_discard) && gameState.number_discard.length > 1;
+        if (!hasNumber) {
+            if (statusMessageEl) statusMessageEl.textContent = 'Keine Zahlentausch-Karte verfügbar (nur eine Karte im Stapel).';
+            return;
+        }
+    }
     const card = gameState.player_hand[pendingTauschCardIndex];
     const gid = sessionStorage.getItem('gameId');
     
@@ -1072,7 +1086,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    const numberOption = document.querySelector('.tausch-option');
+    const numberOption = document.querySelector('.tausch-option[data-target="number"], .tausch-option');
     if (numberOption) {
         numberOption.addEventListener('click', () => selectTauschTarget('number'));
     }
@@ -1467,4 +1481,95 @@ function showSumSelectionModal(drawnCard) {
     // The player will click on a card to form a sum
     closeDrawnCardModal();
     showStatusMessage('Wähle eine Karte aus deiner Hand, um eine Summe zu bilden', 'info');
+}
+
+// Animate GESCHENK effect when opponent takes a card
+function animateGeschenkEffect(takenCard) {
+    console.log('Animating GESCHENK effect for card:', takenCard);
+    
+    // Find the card in player's hand that matches
+    const playerCards = document.querySelectorAll('.hand-card');
+    let cardToAnimate = null;
+    
+    playerCards.forEach(cardEl => {
+        const img = cardEl.querySelector('img');
+        if (img && img.src.includes(getCardImagePath(takenCard).split('/').pop())) {
+            cardToAnimate = cardEl;
+        }
+    });
+    
+    if (!cardToAnimate) {
+        console.log('Could not find card to animate');
+        return;
+    }
+    
+    // Get positions
+    const cardRect = cardToAnimate.getBoundingClientRect();
+    const opponentHandEl = document.querySelector('.opponent-hand');
+    const drawPileEl = document.getElementById('drawPile');
+    
+    if (!opponentHandEl || !drawPileEl) return;
+    
+    const opponentRect = opponentHandEl.getBoundingClientRect();
+    const drawPileRect = drawPileEl.getBoundingClientRect();
+    
+    // Create flying card element (player card to opponent)
+    const flyingCard = document.createElement('div');
+    flyingCard.className = 'flying-card';
+    flyingCard.innerHTML = `<img src="${getCardImagePath(takenCard)}" alt="Card">`;
+    flyingCard.style.position = 'fixed';
+    flyingCard.style.left = `${cardRect.left}px`;
+    flyingCard.style.top = `${cardRect.top}px`;
+    flyingCard.style.width = `${cardRect.width}px`;
+    flyingCard.style.height = `${cardRect.height}px`;
+    flyingCard.style.zIndex = '1000';
+    flyingCard.style.pointerEvents = 'none';
+    flyingCard.style.transition = 'all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)';
+    
+    document.body.appendChild(flyingCard);
+    
+    // Hide original card
+    cardToAnimate.style.opacity = '0';
+    
+    // Animate to opponent hand
+    setTimeout(() => {
+        flyingCard.style.left = `${opponentRect.left + opponentRect.width / 2 - cardRect.width / 2}px`;
+        flyingCard.style.top = `${opponentRect.top + opponentRect.height / 2 - cardRect.height / 2}px`;
+        flyingCard.style.transform = 'scale(0.7) rotate(5deg)';
+        flyingCard.style.opacity = '0.8';
+    }, 50);
+    
+    // After first animation, create draw pile to player animation
+    setTimeout(() => {
+        flyingCard.remove();
+        
+        // Create second flying card (draw pile to player)
+        const drawCard = document.createElement('div');
+        drawCard.className = 'flying-card';
+        drawCard.innerHTML = `<img src="/static/assets/cards/back/deck2_back.png" alt="Card">`;
+        drawCard.style.position = 'fixed';
+        drawCard.style.left = `${drawPileRect.left}px`;
+        drawCard.style.top = `${drawPileRect.top}px`;
+        drawCard.style.width = `${drawPileRect.width}px`;
+        drawCard.style.height = `${drawPileRect.height}px`;
+        drawCard.style.zIndex = '-1';  // Lower z-index so it goes behind player cards
+        drawCard.style.pointerEvents = 'none';
+        drawCard.style.transition = 'all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)';
+        
+        document.body.appendChild(drawCard);
+        
+        // Animate to player hand area
+        const playerHandRect = playerHandEl.getBoundingClientRect();
+        setTimeout(() => {
+            drawCard.style.left = `${playerHandRect.left + playerHandRect.width / 2 - drawPileRect.width / 2}px`;
+            drawCard.style.top = `${playerHandRect.top + playerHandRect.height / 2 - drawPileRect.height / 2}px`;
+            drawCard.style.transform = 'scale(1.1)';
+        }, 50);
+        
+        // Clean up
+        setTimeout(() => {
+            drawCard.remove();
+            cardToAnimate.style.opacity = '1';
+        }, 650);
+    }, 650);
 }

@@ -137,6 +137,27 @@ def play_bot_until_player(game: Dict[str, Any], gid: str, step_delay: float = 0.
                 move = rl.choose_action(state)
             else:
                 move = agent_decide_move(state)
+            
+            # Track GESCHENK data before applying move
+            geschenk_data = None
+            if move[0] == 'PlayAction' and len(move[1]) > 0 and hasattr(move[1][0], 'action') and move[1][0].action == 'GESCHENK':
+                # Bot is playing GESCHENK, find which card it will take from player
+                target_idx = move[1][1] if len(move[1]) > 1 else 0
+                if target_idx == 0:  # Taking from player
+                    player = state.players[0]
+                    # Determine which card will be taken
+                    if len(move[1]) > 2:
+                        idx = move[1][2]
+                        if 0 <= idx < len(player.hand):
+                            taken_card = player.hand[idx]
+                    else:
+                        from code_agent_v1 import choose_best_gift
+                        taken_card = choose_best_gift(state, 0)
+                    if taken_card:
+                        geschenk_data = {
+                            'taken_card': serialize_card(taken_card)
+                        }
+            
             state = apply_move(state, move[0], move[1])
             # Advance turn unless AUSSETZEN already advanced inside
             if move[0] != 'PlayAction' or (move[0] == 'PlayAction' and move[1][0].action != 'AUSSETZEN'):
@@ -147,12 +168,15 @@ def play_bot_until_player(game: Dict[str, Any], gid: str, step_delay: float = 0.
         try:
             # Generate move description for client notification
             move_desc = describe_move_for_client(move[0], move[1], None)
-            emit('opponent_move', {
+            opponent_move_data = {
                 'move_type': move[0],
                 'move_description': f'Gegner spielte: {move_desc}',
                 'move_card': serialize_card(move[1][0]) if move and move[1] else None,
                 'state': serialize_state(state)
-            }, to=gid)
+            }
+            if geschenk_data:
+                opponent_move_data['geschenk_data'] = geschenk_data
+            emit('opponent_move', opponent_move_data, to=gid)
             # Non-blocking sleep for Socket.IO workers
             socketio.sleep(step_delay)
         except Exception:
@@ -330,8 +354,9 @@ def play_drawn_card(data=None):
         emit('game_state', serialize_state(state), to=gid)
         return
     
-    # Advance turn
-    state.active_idx = next_player_index(state, steps=1)
+    # Advance turn (but not for AUSSETZEN, which handles its own skip logic)
+    if not (move_type == 'PlayAction' and hasattr(drawn_card, 'action') and drawn_card.action == 'AUSSETZEN'):
+        state.active_idx = next_player_index(state, steps=1)
     state, winner = end_if_win(state)
     game['state'] = state
     

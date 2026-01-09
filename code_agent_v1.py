@@ -329,7 +329,8 @@ def legal_moves(state: GameState) -> List[Tuple[str, Tuple]]:
         if c.kind == "ACTION" and c.action != "JOKER":
             # TAUSCH requires target stack selection; add both options if available
             if c.action == "TAUSCH":
-                if state.number_discard:
+                # Only allow taking from number discard if more than one card is present
+                if state.number_discard and len(state.number_discard) > 1:
                     moves.append(("PlayAction", (c, "number")))
                 if state.action_discard:
                     moves.append(("PlayAction", (c, "action")))
@@ -397,7 +398,7 @@ def apply_move(state: GameState, move_type: str, payload: Tuple) -> GameState:
 
         if action == "TAUSCH":
             target_stack = payload[1] if len(payload) > 1 else "number"
-            if target_stack == "number" and state.number_discard:
+            if target_stack == "number" and state.number_discard and len(state.number_discard) > 1:
                 player.hand.append(state.number_discard.pop())
             elif target_stack == "action" and state.action_discard[:-1]:
                 # Take the previous top (avoid taking the TAUSCH just placed)

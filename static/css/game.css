@@ -698,6 +698,19 @@ body.game-screen {
     animation: cardDrawSlide 0.5s ease-out forwards;
 }
 
+/* Flying card animation for GESCHENK */
+.flying-card {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+.flying-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 /* Depth effect for piles - stacked card appearance */
 .draw-pile {
     position: relative;
