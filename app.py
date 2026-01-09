@@ -111,7 +111,8 @@ def serialize_state(state: GameState) -> Dict[str, Any]:
         'discard_top': serialize_card(top_num) if top_num else None,
         'number_discard': [serialize_card(c) for c in state.number_discard],
         'action_discard': [serialize_card(c) for c in state.action_discard],
-        'current_turn': 'player' if state.active_idx == 0 else 'opponent'
+        'current_turn': 'player' if state.active_idx == 0 else 'opponent',
+        'pending_plus2': state.pending_plus2
     }
 
 def play_bot_until_player(game: Dict[str, Any], gid: str, step_delay: float = 0.6):
@@ -392,6 +393,14 @@ def play_card(data=None):
     target_opponent = data.get('target_opponent')  # For RESET/GESCHENK
     tausch_target = data.get('target')  # For TAUSCH: 'number' or 'action'
     gift_index = data.get('gift_index')  # For GESCHENK: opponent card index to take
+    
+    print(f"\n=== PLAY_CARD RECEIVED ===")
+    print(f"card_index: {card_index}")
+    print(f"target_opponent: {target_opponent}")
+    print(f"gift_index: {gift_index}")
+    print(f"tausch_target: {tausch_target}")
+    print(f"==========================\n")
+    
     gid = data.get('game_id') or client_to_game.get(request.sid)
     if not gid or gid not in games:
         return
@@ -442,7 +451,10 @@ def play_card(data=None):
     mt, payload = chosen
     # If player specified which card to take for GESCHENK, attach it
     if mt == 'PlayAction' and c.action == 'GESCHENK' and target_opponent is not None and gift_index is not None:
+        print(f"Adding gift_index {gift_index} to GESCHENK payload")
+        print(f"Original payload: {payload}")
         payload = (payload[0], payload[1], int(gift_index))
+        print(f"New payload: {payload}")
     state = apply_move(state, mt, payload)
     # Advance turn (but not for AUSSETZEN)
     if not (mt == 'PlayAction' and c.action == 'AUSSETZEN'):

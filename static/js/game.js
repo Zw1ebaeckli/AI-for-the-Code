@@ -360,6 +360,59 @@ function updateGameState(state) {
     if (state.current_turn) {
         updateTurn({ current_turn: state.current_turn });
     }
+    
+    // Handle +2 penalty state
+    if (state.pending_plus2 && state.pending_plus2 > 0 && state.current_turn === 'player') {
+        handlePendingPlus2(state.player_hand);
+    } else {
+        clearPlus2State();
+    }
+}
+
+// Handle +2 penalty - grey out all cards except +2, highlight draw pile if no +2
+function handlePendingPlus2(playerHand) {
+    const hasPlus2 = playerHand.some(card => card.type === 'action' && card.action === 'PLUS2');
+    
+    // Grey out all cards except +2
+    document.querySelectorAll('.hand-card').forEach((cardEl) => {
+        const idx = parseInt(cardEl.dataset.index, 10);
+        const card = playerHand[idx];
+        
+        if (card && card.type === 'action' && card.action === 'PLUS2') {
+            // Keep +2 cards enabled
+            cardEl.style.filter = 'none';
+            cardEl.style.opacity = '1';
+            cardEl.classList.remove('unplayable');
+        } else {
+            // Grey out other cards
+            cardEl.style.filter = 'grayscale(100%) brightness(0.75) contrast(0.9)';
+            cardEl.style.opacity = '1';
+            cardEl.classList.add('unplayable');
+        }
+    });
+    
+    // Add blue border to draw pile if no +2 cards available
+    const drawPileEl = document.getElementById('drawPile');
+    if (drawPileEl) {
+        if (!hasPlus2) {
+            drawPileEl.style.border = '3px solid #2196F3';
+            drawPileEl.style.borderRadius = '12px';
+            drawPileEl.style.boxShadow = '0 0 15px rgba(33, 150, 243, 0.6)';
+        } else {
+            drawPileEl.style.border = '';
+            drawPileEl.style.boxShadow = '';
+        }
+    }
+}
+
+// Clear +2 penalty state styling
+function clearPlus2State() {
+    // Remove blue border from draw pile
+    const drawPileEl = document.getElementById('drawPile');
+    if (drawPileEl) {
+        drawPileEl.style.border = '';
+        drawPileEl.style.boxShadow = '';
+    }
 }
 
 // Render player's hand with sorting and overlapping
@@ -970,12 +1023,14 @@ function selectGeschenkTarget(cardIdx) {
     const gid = sessionStorage.getItem('gameId');
     if (statusMessageEl) statusMessageEl.textContent = 'Geschenk wird gespielt...';
     console.log('GESCHENK select index', cardIdx);
+    console.log('Pending Geschenk card index:', pendingGeschenkCardIndex);
     const payload = {
         game_id: gid,
         card_index: pendingGeschenkCardIndex,
         target_opponent: 1,
         gift_index: cardIdx
     };
+    console.log('Sending GESCHENK payload:', payload);
     socket.emit('play_card', payload);
     closeGeschenkModal();
 }
@@ -1031,7 +1086,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const drawnCardAddToHandBtn = document.getElementById('drawnCardAddToHandBtn');
     
     if (drawnCardCloseBtn) {
-        drawnCardCloseBtn.addEventListener('click', closeDrawnCardModal);
+        drawnCardCloseBtn.addEventListener('click', () => {
+            // Closing the modal without playing = add to hand
+            const gid = sessionStorage.getItem('gameId');
+            socket.emit('drawn_card_add_to_hand', { game_id: gid });
+            closeDrawnCardModal();
+        });
     }
     if (drawnCardAddToHandBtn) {
         drawnCardAddToHandBtn.addEventListener('click', () => {
@@ -1043,6 +1103,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (drawnCardModal) {
         drawnCardModal.addEventListener('click', (e) => {
             if (e.target === drawnCardModal) {
+                // Clicking outside = add to hand
+                const gid = sessionStorage.getItem('gameId');
+                socket.emit('drawn_card_add_to_hand', { game_id: gid });
                 closeDrawnCardModal();
             }
         });
@@ -1343,6 +1406,41 @@ function activateSumModeForDrawnCard(drawnCard) {
 
 function playDrawnCardImmediately(moveType, card) {
     const gid = sessionStorage.getItem('gameId');
+    
+    // Special handling for action cards that need additional selection
+    if (moveType === 'PlayAction') {
+        if (card.action === 'GESCHENK') {
+            // Close modal and find the card index in hand, then show GESCHENK modal
+            closeDrawnCardModal();
+            // Find the card in the player's hand
+            const playerHand = gameState.player_hand || [];
+            const cardIndex = playerHand.findIndex(c => 
+                c.type === card.type && 
+                c.action === card.action && 
+                JSON.stringify(c) === JSON.stringify(card)
+            );
+            if (cardIndex !== -1) {
+                showGeschenkModal(cardIndex);
+            }
+            return;
+        } else if (card.action === 'TAUSCH') {
+            // Close modal and find the card index in hand, then show TAUSCH modal
+            closeDrawnCardModal();
+            // Find the card in the player's hand
+            const playerHand = gameState.player_hand || [];
+            const cardIndex = playerHand.findIndex(c => 
+                c.type === card.type && 
+                c.action === card.action && 
+                JSON.stringify(c) === JSON.stringify(card)
+            );
+            if (cardIndex !== -1) {
+                showTauschModal(cardIndex);
+            }
+            return;
+        }
+    }
+    
+    // For all other cards, play normally
     socket.emit('play_drawn_card', {
         game_id: gid,
         move_type: moveType,

@@ -419,22 +419,34 @@ def apply_move(state: GameState, move_type: str, payload: Tuple) -> GameState:
             target_idx = payload[1]
             opp = state.players[target_idx]
             gift_card = None
+            print(f"\n=== GESCHENK ACTION ===")
+            print(f"Payload: {payload}")
+            print(f"Payload length: {len(payload)}")
             # If player specified a card index, use it; otherwise fall back to best
             if len(payload) > 2:
                 idx = payload[2]
+                print(f"Player specified card index: {idx}")
                 if 0 <= idx < len(opp.hand):
                     gift_card = opp.hand[idx]
+                    print(f"Selected card: {gift_card}")
+                else:
+                    print(f"Invalid index {idx}, opponent has {len(opp.hand)} cards")
             if gift_card is None:
+                print("Falling back to choose_best_gift")
                 gift_card = choose_best_gift(state, target_idx)
             if gift_card:
+                print(f"Transferring card: {gift_card}")
                 # Transfer chosen card; target draws a replacement
                 for k, hcard in enumerate(opp.hand):
                     if hcard is gift_card:
                         opp.hand.pop(k)
                         player.hand.append(gift_card)
+                        print(f"Card transferred successfully")
                         break
                 if state.draw_pile:
                     opp.hand.append(state.draw_pile.pop())
+                    print(f"Opponent drew replacement card")
+            print(f"======================\n")
 
         elif action == "RESET":
             target_idx = payload[1]
