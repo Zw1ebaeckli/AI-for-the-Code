@@ -20,9 +20,18 @@ socket.onAny((event, ...args) => {
 const playerName = sessionStorage.getItem('playerName') || 'Player';
 const agentType = sessionStorage.getItem('agentType') || 'rule_based';
 
+// Apply agent type styling to opponent pill
+if (agentType === 'rl') {
+    setTimeout(() => {
+        if (opponentPillEl) opponentPillEl.classList.add('agent-rl');
+    }, 100);
+}
+
 // DOM Elements
 const playerNameEl = document.getElementById('playerName');
 const opponentNameEl = document.getElementById('opponentName');
+const playerPillEl = document.querySelector('.player-pill');
+const opponentPillEl = document.querySelector('.opponent-pill');
 const playerHandEl = document.getElementById('playerHand');
 const opponentHandEl = document.getElementById('opponentHand');
 const discardPileEl = document.getElementById('discardPile');
@@ -323,14 +332,30 @@ function updateGameState(state) {
         });
 
         // Render the player's code card image (no overlay needed)
-        try {
-            const codeStr = state.player_code.map(String).join('');
-            if (playerCodeCardEl && codeStr && codeStr.length === 4) {
-                const src = `/static/assets/cards/code/code_${codeStr}.png`;
-                playerCodeCardEl.innerHTML = `<img src="${src}" alt="Codekarte ${codeStr}">`;
+        const codeStr = state.player_code.map(String).join('');
+        console.log('Rendering code card for:', codeStr, 'playerCodeCardEl:', playerCodeCardEl);
+        if (playerCodeCardEl && codeStr && codeStr.length === 4) {
+            const src = `/static/assets/cards/code/code_${codeStr}.png`;
+            console.log('Setting code card image src:', src);
+            // Build image with onerror fallback
+            playerCodeCardEl.innerHTML = `<img src="${src}" alt="Codekarte ${codeStr}" class="code-card-img">`;
+
+            const imgEl = playerCodeCardEl.querySelector('img');
+            if (imgEl) {
+                imgEl.onerror = () => {
+                    playerCodeCardEl.innerHTML = `
+                        <div class="code-card-fallback">
+                            <div class="code-card-fallback-title">Codekarte</div>
+                            <div class="code-card-fallback-digits">${codeStr.split('').join(' ')}</div>
+                        </div>`;
+                };
             }
-        } catch (e) {
-            // Fail silently if code not ready
+
+            // Reset any leftover position styles
+            playerCodeCardEl.style.position = '';
+            playerCodeCardEl.style.left = '';
+            playerCodeCardEl.style.top = '';
+            playerCodeCardEl.style.margin = '';
         }
     }
     
@@ -694,13 +719,11 @@ function playCard(cardIndex, card = null, targetOpponent = null) {
 function updateTurn(data) {
     gameState.current_turn = data.current_turn;
     
-    if (data.current_turn === 'player') {
-        if (turnIndicatorEl) turnIndicatorEl.textContent = 'Dein Zug';
-        if (statusMessageEl) statusMessageEl.textContent = 'Karte spielen oder aufnehmen';
-    } else {
-        if (turnIndicatorEl) turnIndicatorEl.textContent = 'Zug des Gegners';
-        if (statusMessageEl) statusMessageEl.textContent = 'Warten auf Gegner...';
-    }
+    const isPlayerTurn = data.current_turn === 'player';
+    if (turnIndicatorEl) turnIndicatorEl.textContent = isPlayerTurn ? 'Dein Zug' : 'Zug des Gegners';
+    if (statusMessageEl) statusMessageEl.textContent = isPlayerTurn ? 'Karte spielen oder aufnehmen' : 'Warten auf Gegner...';
+    if (playerPillEl) playerPillEl.classList.toggle('is-turn', isPlayerTurn);
+    if (opponentPillEl) opponentPillEl.classList.toggle('is-turn', !isPlayerTurn);
 }
 
 // Click on draw pile image triggers draw

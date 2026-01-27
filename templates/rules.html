@@ -1,69 +1,163 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>How to Play - CODE</title>
+    <title>Spielregeln - CODE</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
-    <div class="container">
-        <div class="rules-page">
-            <h1>How to Play CODE</h1>
-            
-            <button class="btn btn-secondary back-btn" onclick="window.location.href='/'">Back to Menu</button>
+<body class="rules-body">
+    <div class="matrix-background"></div>
+    <div class="rules-shell">
+        <header class="rules-hero">
+            <div class="hero-text">
+                <div class="hero-icon">?</div>
+                <div>
+                    <p class="eyebrow">SPIELREGELN</p>
+                    <h1>So spielst du CODE</h1>
+                    <p class="lede">Kurzer Überblick über Material, Spielstart und was du in deinem Zug tun kannst.</p>
+                </div>
+            </div>
+            <a class="ghost-btn" href="/">← Zurück</a>
+        </header>
 
-            <section class="rules-section">
-                <h2>Objective</h2>
-                <p>Be the first player to crack your opponent's secret code by deducing the correct 4-digit combination.</p>
-            </section>
-
-            <section class="rules-section">
-                <h2>Setup</h2>
-                <ul>
-                    <li>Each player receives a random 4-digit code card</li>
-                    <li>Players draw 5 cards from the deck to start</li>
-                    <li>The deck contains number cards (0-9 in 4 colors) and action cards</li>
+        <main class="rules-grid-new">
+            <section class="rule-card">
+                <header>
+                    <p class="eyebrow">INHALT</p>
+                    <h2>Alle Karten aufgelistet</h2>
+                </header>
+                <ul class="bullet-list">
+                    <li>10 Codekarten</li>
+                    <li>80 Zahlenkarten (0–9 je 2× in 4 Farben)</li>
+                    <li>30 Aktionskarten: 8× +2, 8× Aussetzen, 5× Richtungswechsel, 4× Joker, 4× Geschenk, 1× Reset</li>
                 </ul>
             </section>
 
-            <section class="rules-section">
-                <h2>Gameplay</h2>
-                <p><strong>On Your Turn:</strong></p>
-                <ol>
-                    <li><strong>Play a Card:</strong> Play a number or action card from your hand</li>
-                    <li><strong>Make a Guess:</strong> Try to guess one digit of your opponent's code</li>
-                    <li><strong>Get Feedback:</strong> 
-                        <ul>
-                            <li>✓ Correct digit in correct position</li>
-                            <li>~ Correct digit in wrong position</li>
-                            <li>✗ Digit not in code</li>
-                        </ul>
-                    </li>
-                    <li><strong>Draw a Card:</strong> Draw from the deck to replenish your hand</li>
-                </ol>
+            <section class="rule-card turn-card">
+                <header>
+                    <p class="eyebrow">DEIN ZUG</p>
+                    <h2>Wähle genau eine Option</h2>
+                    <p class="lede small">Du spielst gegen den gewählten Agent. Wenn du am Zug bist, wähle eine der drei Optionen.</p>
+                </header>
+                <div class="turn-steps">
+                    <div class="turn-step">
+                        <div class="step-badge">A</div>
+                        <div>
+                            <h3>Eine oder zwei Zahlenkarten ablegen</h3>
+                            <p><strong>Einzelkarte:</strong> Klicke auf eine Karte, die zur obersten Karte des Zahlen-Ablegestapels passt (gleiche Farbe oder gleiche Zahl).</p>
+                            <p><strong>Zwei Karten (Summe):</strong> Aktiviere den Summe-Modus durch Klick auf den <strong>„SUMME"</strong>-Button. Wähle dann zwei Karten, deren Summe dem Wert der obersten Karte entspricht. Die zweite Karte bestimmt Farbe/Zahl für den nächsten Zug.</p>
+                            <div class="visual-example sum-example">
+                                <div class="example-label">Beispiel Summe:</div>
+                                <div class="card-row">
+                                    <img src="{{ url_for('static', filename='assets/cards/number/rot_7_copy1.png') }}" alt="Ziel 7" class="example-card">
+                                    <span class="equals">=</span>
+                                    <img src="{{ url_for('static', filename='assets/cards/number/blau_3_copy1.png') }}" alt="3" class="example-card">
+                                    <span class="plus">+</span>
+                                    <img src="{{ url_for('static', filename='assets/cards/number/gelb_4_copy1.png') }}" alt="4" class="example-card">
+                                </div>
+                            </div>
+                            <div class="hint inline">Ungültige Karten werden beim Versuch gespielt zu werden rot markiert und können nicht gespielt werden.</div>
+                        </div>
+                    </div>
+                    <div class="turn-step">
+                        <div class="step-badge">B</div>
+                        <div>
+                            <h3>Eine Karte ziehen</h3>
+                            <p>Klicke auf den Nachziehstapel, um eine Karte zu ziehen. Passt die gezogene Karte, kannst du sie sofort spielen (einzeln oder als Teil einer Summe).</p>
+                            <div class="hint inline">Der Stapel wird automatisch neu gemischt, wenn er leer ist.</div>
+                        </div>
+                    </div>
+                    <div class="turn-step">
+                        <div class="step-badge">C</div>
+                        <div>
+                            <h3>Aktionskarte spielen</h3>
+                            <p>Klicke auf eine Aktionskarte in deiner Hand. Der Effekt wird sofort ausgeführt:</p>
+                            <div class="action-cards-grid">
+                                <div class="action-card-item">
+                                    <img src="{{ url_for('static', filename='assets/cards/action/plus2_1.png') }}" alt="+2" class="action-card-img">
+                                    <div class="action-desc">
+                                        <strong>+2</strong>
+                                        <p>Gegner zieht 2 Karten oder spielt eigene +2.</p>
+                                    </div>
+                                </div>
+                                <div class="action-card-item">
+                                    <img src="{{ url_for('static', filename='assets/cards/action/richtungswechsel_1.png') }}" alt="Richtungswechsel" class="action-card-img">
+                                    <div class="action-desc">
+                                        <strong>Richtungswechsel</strong>
+                                        <p>Bei 2 Spielern erhältst du sofort einen weiteren Zug.</p>
+                                    </div>
+                                </div>
+                                <div class="action-card-item">
+                                    <img src="{{ url_for('static', filename='assets/cards/action/aussetzen_1.png') }}" alt="Aussetzen" class="action-card-img">
+                                    <div class="action-desc">
+                                        <strong>Aussetzen</strong>
+                                        <p>Gegner wird übersprungen.</p>
+                                    </div>
+                                </div>
+                                <div class="action-card-item">
+                                    <img src="{{ url_for('static', filename='assets/cards/action/joker_1.png') }}" alt="Joker" class="action-card-img">
+                                    <div class="action-desc">
+                                        <strong>Joker</strong>
+                                        <p>Kann als beliebige Zahlenkarte für deine Codekarte verwendet werden.</p>
+                                    </div>
+                                </div>
+                                <div class="action-card-item">
+                                    <img src="{{ url_for('static', filename='assets/cards/action/geschenk_1.png') }}" alt="Geschenk" class="action-card-img">
+                                    <div class="action-desc">
+                                        <strong>Geschenk</strong>
+                                        <p>Popup zeigt Gegnerkarten – wähle eine zum Nehmen; Gegner zieht nach.</p>
+                                    </div>
+                                </div>
+                                <div class="action-card-item">
+                                    <img src="{{ url_for('static', filename='assets/cards/action/tausch_1.png') }}" alt="Tausch" class="action-card-img">
+                                    <div class="action-desc">
+                                        <strong>Tausch</strong>
+                                        <p>Popup fragt, welche Karte (oberste vom Zahlen- oder Aktionsstapel) du nehmen willst.</p>
+                                    </div>
+                                </div>
+                                <div class="action-card-item">
+                                    <img src="{{ url_for('static', filename='assets/cards/action/reset_1.png') }}" alt="Reset" class="action-card-img">
+                                    <div class="action-desc">
+                                        <strong>Reset</strong>
+                                        <p>Gegner-Codekarte wird zurückgesetzt.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </section>
 
-            <section class="rules-section">
-                <h2>Action Cards</h2>
-                <ul>
-                    <li><strong>JOKER:</strong> Wild card, can be played as any number</li>
-                    <li><strong>AUSSETZEN (Skip):</strong> Opponent skips their next turn</li>
-                    <li><strong>PLUS2:</strong> Opponent draws 2 extra cards</li>
-                    <li><strong>TAUSCH (Swap):</strong> Swap hands with opponent</li>
-                    <li><strong>GESCHENK (Gift):</strong> Give a card to opponent</li>
-                    <li><strong>RESET:</strong> All players draw new codes</li>
-                    <li><strong>RICHTUNGSWECHSEL (Reverse):</strong> Reverse play direction (multiplayer)</li>
-                </ul>
+            <section class="rule-card">
+                <header>
+                    <p class="eyebrow">ZIEL</p>
+                    <h2>Spielende</h2>
+                </header>
+                <p>Wer zuerst die auf seiner Codekarte angezeigten vier Zahlenkarten sammelt und ablegt, gewinnt sofort. Deine Codekarte und der Fortschritt werden rechts im Spiel angezeigt.</p>
+                <div class="visual-example code-example">
+                    <div class="example-label">Beispiel Codekarte:</div>
+                    <img src="{{ url_for('static', filename='assets/cards/code/code_1258.png') }}" alt="Code 1258" class="example-code-card">
+                    <p class="caption">Sammle die Zahlen 1, 2, 5 und 8 um zu gewinnen</p>
+                </div>
+                <div class="visual-example winning-example">
+                    <div class="example-label">Siegreiches Beispiel (mit Joker):</div>
+                    <div class="card-row">
+                        <img src="{{ url_for('static', filename='assets/cards/number/rot_1_copy1.png') }}" alt="1" class="example-card">
+                        <img src="{{ url_for('static', filename='assets/cards/number/blau_2_copy1.png') }}" alt="2" class="example-card">
+                        <img src="{{ url_for('static', filename='assets/cards/action/joker_1.png') }}" alt="Joker" class="example-card">
+                        <img src="{{ url_for('static', filename='assets/cards/number/violett_8_copy1.png') }}" alt="8" class="example-card">
+                    </div>
+                    <p class="caption">Joker ersetzt die fehlende 5 – Sieg!</p>
+                </div>
+                <div class="hint inline">Tipp: Im Fenster rechts siehst du deine Codekarte und welche Zahlen du bereits erfüllt hast.</div>
+                <a class="primary-btn" href="/">Zurück zum Menü</a>
             </section>
-
-            <section class="rules-section">
-                <h2>Winning</h2>
-                <p>The first player to correctly guess all 4 digits of their opponent's code in the correct positions wins the game!</p>
-            </section>
-
-            <button class="btn btn-primary" onclick="window.location.href='/'">Start Playing!</button>
-        </div>
+        </main>
     </div>
+    <script src="{{ url_for('static', filename='js/start.js') }}"></script>
 </body>
 </html>

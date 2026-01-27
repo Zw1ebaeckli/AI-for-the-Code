@@ -17,6 +17,11 @@
         <!-- Top Bar with Menu -->
         <div class="top-bar">
             <button class="btn-menu" onclick="window.location.href='/'">← MENU</button>
+            <div class="player-meta">
+                <div class="player-pill" id="playerName">Player</div>
+                <div class="versus">vs</div>
+                <div class="opponent-pill" id="opponentName">Rule-Based Agent</div>
+            </div>
         </div>
 
         <!-- Left Sidebar Game Mechanics -->
@@ -25,7 +30,7 @@
                 <div class="code-window collapsed" id="mechanicsWindow">
                     <div class="code-window-header">
                         <div class="code-window-title">SPIELMECHANIK</div>
-                        <div class="code-window-dots" id="mechanicsToggle"><span></span><span></span><span></span></div>
+                        <div class="code-window-dots question" id="mechanicsToggle" aria-label="Spielregeln">?</div>
                     </div>
                     <div class="code-window-body">
                         <div class="mechanics-content">

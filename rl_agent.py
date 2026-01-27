@@ -32,14 +32,6 @@ import random
 import pickle
 from typing import Tuple, Dict, List
 from collections import defaultdict, deque
-
-try:
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    MATPLOTLIB_AVAILABLE = True
-except ImportError:
-    MATPLOTLIB_AVAILABLE = False
 from code_agent_v1 import (
     GameState, Card, setup_game, legal_moves, apply_move, 
     end_if_win, is_win, next_player_index, agent_decide_move,
@@ -755,43 +747,6 @@ def evaluate_agent(agent: QLearningAgent, opponent, n_games: int = 500) -> Dict:
     }
 
 
-def plot_training_curves(mixed_history: List[Dict], focused_history: List[Dict], mixed_episodes: int):
-    """Plot and save training win-rate curves from history blocks."""
-    if not MATPLOTLIB_AVAILABLE:
-        print("matplotlib not available; skipping plot. Install with: pip install matplotlib")
-        return
-    
-    if not mixed_history and not focused_history:
-        print("No training history to plot.")
-        return
-
-    plt.figure(figsize=(10, 5))
-
-    if mixed_history:
-        plt.plot(
-            [h["episode"] for h in mixed_history],
-            [h["win_rate"] for h in mixed_history],
-            label="Mixed (block win rate)",
-        )
-
-    if focused_history:
-        plt.plot(
-            [mixed_episodes + h["episode"] for h in focused_history],
-            [h["win_rate"] for h in focused_history],
-            label="Focused (block win rate)",
-        )
-
-    plt.xlabel("Episode")
-    plt.ylabel("Win rate (block)")
-    plt.ylim(0, 1)
-    plt.grid(True, alpha=0.3)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig("training_winrate.png")
-    plt.close()
-    print("Saved training curve to training_winrate.png")
-
-
 def print_training_table(mixed_history: List[Dict], focused_history: List[Dict], mixed_episodes: int):
     """Print training history as a formatted table."""
     print("\n" + "=" * 90)
@@ -877,7 +832,6 @@ if __name__ == "__main__":
     )
 
     print_training_table(mixed_history, focused_history, mixed_episodes)
-    plot_training_curves(mixed_history, focused_history, mixed_episodes)
 
     # Evaluate with no exploration
     print("\n" + "=" * 75)

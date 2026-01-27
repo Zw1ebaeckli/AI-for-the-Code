@@ -49,7 +49,16 @@ if (initialAgent === 'rule_based') {
 
 // Start game
 startGameBtn.addEventListener('click', () => {
-    const playerName = playerNameInput.value.trim() || 'Player';
+    const playerName = playerNameInput.value.trim();
+    
+    // Validate that name is not empty
+    if (!playerName) {
+        playerNameInput.classList.add('error');
+        playerNameInput.placeholder = 'Name erforderlich!';
+        return;
+    }
+    
+    playerNameInput.classList.remove('error');
     const agentType = document.querySelector('input[name="agent"]:checked').value;
     
     // Store player info in sessionStorage
@@ -87,5 +96,12 @@ socket.on('disconnect', () => {
 playerNameInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
         startGameBtn.click();
+    }
+});
+// Clear error state when user types
+playerNameInput.addEventListener('input', () => {
+    if (playerNameInput.classList.contains('error')) {
+        playerNameInput.classList.remove('error');
+        playerNameInput.placeholder = 'Name eingeben';
     }
 });

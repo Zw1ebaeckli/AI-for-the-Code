@@ -64,6 +64,8 @@ body.game-screen {
     padding: 1.5rem 2rem;
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
 }
 
 .btn-menu {
@@ -84,6 +86,59 @@ body.game-screen {
 .btn-menu:hover {
     background: rgba(255,255,255,0.1);
     border-color: rgba(255,255,255,0.5);
+}
+
+.player-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.player-pill, .opponent-pill {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    padding: 0.5rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.2);
+    min-width: 140px;
+    text-align: center;
+    transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+}
+
+.player-pill.is-turn {
+    background: rgba(255,255,255,0.16);
+    border-color: rgba(255,255,255,0.5);
+    box-shadow: 0 0 18px rgba(255,255,255,0.35);
+    transform: translateY(-2px);
+}
+
+.opponent-pill {
+    background: #ed212a;
+    border-color: #ed212a;
+}
+
+.opponent-pill.agent-rl {
+    background: #1e88e5;
+    border-color: #1e88e5;
+}
+
+.opponent-pill.is-turn {
+    box-shadow: 0 0 18px rgba(237,33,42,0.55);
+    transform: translateY(-2px);
+}
+
+.opponent-pill.agent-rl.is-turn {
+    box-shadow: 0 0 18px rgba(30,136,229,0.55);
+    transform: translateY(-2px);
+}
+
+.versus {
+    color: rgba(255,255,255,0.7);
+    text-transform: uppercase;
+    font-size: 0.85rem;
 }
 
 /* Main Game Board */
@@ -561,7 +616,7 @@ body.game-screen {
 
 .code-card-panel { width: 280px; }
 
-.mechanics-sidebar .code-card-panel { width: 480px; }
+.mechanics-sidebar .code-card-panel { width: 320px; max-width: 90vw; }
 
 /* Collapsed state for the code window (only header visible) */
 .code-window.collapsed .code-window-body {
@@ -607,11 +662,22 @@ body.game-screen {
     color: #252324;
 }
 
-.code-window-dots { display: flex; gap: 0.5rem; cursor: pointer; }
+.code-window-dots { display: flex; gap: 0.5rem; cursor: pointer; align-items: center; justify-content: center; }
 .code-window-dots span {
     width: 12px; height: 12px; border-radius: 50%;
     background: #9a9a9a;
     display: inline-block;
+}
+.code-window-dots.question {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: #252324;
+    color: #fff;
+    font-weight: 700;
+    font-family: 'Space Mono', monospace;
+    font-size: 1rem;
+    border: 1px solid rgba(0,0,0,0.25);
 }
 
 .code-window-body {
@@ -639,22 +705,42 @@ body.game-screen {
     align-items: center;
     justify-content: center;
     filter: drop-shadow(0 14px 30px rgba(0,0,0,0.45));
-    cursor: grab;
     user-select: none;
-    transition: transform 0.1s ease;
+    pointer-events: none;
 }
-
-.code-card-visual:active {
-    cursor: grabbing;
-}
-
-.code-card-visual.dragging {
-    opacity: 0.8;
-    z-index: 100;
-}
-
 
 .code-card-visual img { width: 100%; height: 100%; object-fit: cover; }
+
+.code-card-fallback {
+    width: 100%;
+    height: 100%;
+    background: #1e1c1d;
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    border-radius: 14px;
+    padding: 0.5rem;
+    text-align: center;
+}
+
+.code-card-fallback-title {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    opacity: 0.8;
+}
+
+.code-card-fallback-digits {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: 1.3rem;
+    letter-spacing: 0.25em;
+}
 
 .code-display-inline {
     display: flex;
@@ -732,9 +818,9 @@ body.game-screen {
 /* Narrow view: show arrow cue when collapsed */
 @media (max-width: 980px) {
     .code-card-sidebar { right: 1rem; }
-    .code-card-sidebar.collapsed .code-card-panel { width: 50px; }
-    .code-card-sidebar.collapsed .code-window { width: 50px; }
-    .code-card-sidebar.collapsed { right: 1rem; }
+    .code-card-sidebar .code-card-panel { width: 280px; }
+    .code-card-sidebar:has(.code-window.collapsed) .code-card-panel { width: 50px; }
+    .code-card-sidebar:has(.code-window.collapsed) .code-window { width: 50px; }
     .code-window.collapsed .code-window-header { padding: 0.6rem 0.4rem; justify-content: center; }
     .code-window.collapsed .code-window-title { display: none; }
     .code-window.collapsed .code-window-dots span { display: none; }
@@ -745,6 +831,12 @@ body.game-screen {
         color: #555;
         font-size: 0.95rem;
     }
+    
+    .mechanics-sidebar .code-card-panel { width: 50px; }
+    .mechanics-sidebar .code-window.collapsed { width: 50px; }
+    .mechanics-sidebar.collapsed .code-card-panel { width: 50px; }
+    .mechanics-sidebar.collapsed .code-window { width: 50px; }
+    .mechanics-sidebar:has(.code-window.collapsed) .code-card-panel { width: 50px; }
     
     .moves-sidebar { left: 1rem; }
     .moves-sidebar.collapsed .moves-panel { width: 50px; }

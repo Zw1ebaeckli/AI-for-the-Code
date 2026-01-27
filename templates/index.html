@@ -15,14 +15,13 @@
     <!-- Removed menu button per design -->
 
     <div class="start-screen-content">
-        <div class="logo-container">
+        <div class="logo-container matrix-mask">
             <img src="{{ url_for('static', filename='img/Code_Logo.svg') }}" alt="CODE Logo" />
         </div>
 
-        <nav class="menu-links">
+        <nav class="menu-links matrix-mask">
             <a class="menu-link" id="playBtn">SPIELEN</a>
             <a class="menu-link" href="/rules">SPIELREGELN</a>
-            <span class="menu-link disabled">BESTENLISTE</span>
         </nav>
 
         <div class="key-art">
@@ -31,8 +30,8 @@
     </div>
 
     <!-- Game Setup Modal -->
-    <div id="setupModal" class="modal">
-        <div class="modal-content game-setup">
+    <div id="setupModal" class="modal" data-mask-matrix="true">
+        <div class="modal-content game-setup" data-mask-matrix="true">
             <div class="modal-header">
                 <h2>SPIELVORBEREITUNG</h2>
                 <div class="modal-nav-dots">
