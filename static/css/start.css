@@ -145,6 +145,11 @@ html, body { background: var(--dark-bg); margin: 0; padding: 0; }
 .agent-rl input:not(:checked) ~ label h3 { color: #888; }
 .agent-rl input:not(:checked) ~ label p { color: #999; }
 
+/* Training mode checkbox */
+.training-mode-checkbox { display: flex; align-items: center; gap: 1rem; margin: 1.5rem 0; padding: 0 2rem; }
+.training-mode-checkbox input[type="checkbox"] { width: 28px; height: 28px; cursor: pointer; accent-color: #00aeef; }
+.training-mode-checkbox label { font-family: 'Barlow', sans-serif; font-size: 1.1rem; color: #222; cursor: pointer; margin: 0; font-weight: 500; }
+
 .modal-buttons { display: flex; gap: 1.2rem; margin-top: 1.5rem; margin-bottom: 1.5rem; }
 .modal-buttons .btn { flex: 1; }
 

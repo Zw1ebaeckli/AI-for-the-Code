@@ -16,7 +16,7 @@ from code_agent_v1 import (
     next_player_index, agent_decide_move, Card, GameState,
     can_card_be_played, find_playable_moves_for_card
 )
-from rl_agent import QLearningAgent
+from rl_agent import QLearningAgent, get_state_features, get_action_features, compute_reward
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(16)
@@ -81,9 +81,12 @@ def handle_start_game(data):
     games[game_id] = {
         'player_name': player_name,
         'agent_type': agent_type,
+        'training_mode': data.get('training_mode', False),  # Enable human training
         'rl_agent': rl,
         'state': state,
         'created_at': datetime.now(),
+        'move_history': [],  # Track moves for RL learning: [(state_before, move, ai_player_idx, step), ...]
+        'total_steps': 0,  # Track game length for efficiency reward
     }
     
     emit('game_started', {
@@ -115,10 +118,23 @@ def serialize_state(state: GameState) -> Dict[str, Any]:
         'pending_plus2': state.pending_plus2
     }
 
+def ensure_game_fields(game: Dict[str, Any]) -> None:
+    """Ensure all required fields exist in game dictionary."""
+    if 'total_steps' not in game:
+        game['total_steps'] = 0
+    if 'move_history' not in game:
+        game['move_history'] = []
+    if 'training_mode' not in game:
+        game['training_mode'] = False
+
 def play_bot_until_player(game: Dict[str, Any], gid: str, step_delay: float = 0.6):
     state: GameState = game['state']
     agent_type = game['agent_type']
     rl = game.get('rl_agent')
+    
+    # Ensure all required fields exist
+    ensure_game_fields(game)
+    
     winner = None
     # Let bot play until it's player's turn or game ends
     loop_guard = 0
@@ -132,6 +148,11 @@ def play_bot_until_player(game: Dict[str, Any], gid: str, step_delay: float = 0.
             # Advance turn after forced draws
             state.active_idx = next_player_index(state, steps=1)
         else:
+            # Track state before move for learning
+            state_features_before = None
+            if agent_type == 'rl' and rl is not None:
+                state_features_before = get_state_features(state, 1)  # Player 1 (AI)
+            
             # Normal move selection
             if agent_type == 'rl' and rl is not None:
                 move = rl.choose_action(state)
@@ -162,8 +183,28 @@ def play_bot_until_player(game: Dict[str, Any], gid: str, step_delay: float = 0.
             # Advance turn unless AUSSETZEN already advanced inside
             if move[0] != 'PlayAction' or (move[0] == 'PlayAction' and move[1][0].action != 'AUSSETZEN'):
                 state.active_idx = next_player_index(state, steps=1)
+            
+            # Store move for learning
+            if agent_type == 'rl' and rl is not None and state_features_before is not None:
+                # Ensure these fields exist before accessing
+                if 'move_history' not in game:
+                    game['move_history'] = []
+                if 'total_steps' not in game:
+                    game['total_steps'] = 0
+                
+                game['move_history'].append({
+                    'state_before': state_features_before,
+                    'move': move,
+                    'step': game['total_steps'],
+                })
+        
         state, winner = end_if_win(state)
         game['state'] = state
+        
+        # Ensure total_steps exists before incrementing
+        if 'total_steps' not in game:
+            game['total_steps'] = 0
+        game['total_steps'] += 1
         # Emit step update to allow client-side animation
         try:
             # Generate move description for client notification
@@ -200,9 +241,12 @@ def join_game(data):
         games[game_id] = {
             'player_name': player_name,
             'agent_type': agent_type,
+            'training_mode': False,
             'rl_agent': None,
             'state': state,
             'created_at': datetime.now(),
+            'move_history': [],
+            'total_steps': 0,
         }
         game = games[game_id]
     join_room(game_id)
@@ -215,6 +259,10 @@ def join_game(data):
         winner = play_bot_until_player(game, game_id)
     emit('game_state', serialize_state(game['state']))
     if winner is not None:
+        # Learn from game if RL agent
+        if game['agent_type'] == 'rl' and game.get('rl_agent') is not None:
+            learn_from_game(game, winner)
+        
         # Reveal opponent details on win
         if winner == 1:
             opp = game['state'].players[1]
@@ -237,6 +285,7 @@ def draw_card(data=None):
         print(f"Game not found for gid={gid}")
         return
     game = games[gid]
+    ensure_game_fields(game)
     state: GameState = game['state']
     if state.active_idx != 0:
         # Not player's turn; just send current state back
@@ -299,6 +348,9 @@ def draw_card(data=None):
     winner = play_bot_until_player(game, gid)
     emit('game_state', serialize_state(game['state']), to=gid)
     if winner is not None:
+        # Learn from game if RL agent
+        learn_from_game(game, winner)
+        
         if winner == 1:
             opp = game['state'].players[1]
             emit('game_over', {
@@ -388,6 +440,7 @@ def drawn_card_add_to_hand(data=None):
     drawn_card_pending.pop(gid, None)
     
     game = games[gid]
+    ensure_game_fields(game)
     state: GameState = game['state']
     
     # Advance turn (drawn card stays in hand)
@@ -400,6 +453,9 @@ def drawn_card_add_to_hand(data=None):
     emit('game_state', serialize_state(game['state']), to=gid)
     
     if winner is not None:
+        # Learn from game if RL agent
+        learn_from_game(game, winner)
+        
         if winner == 1:
             opp = game['state'].players[1]
             emit('game_over', {
@@ -430,6 +486,7 @@ def play_card(data=None):
     if not gid or gid not in games:
         return
     game = games[gid]
+    ensure_game_fields(game)
     state: GameState = game['state']
     if state.active_idx != 0:
         emit('game_state', serialize_state(state), to=gid)
@@ -492,6 +549,9 @@ def play_card(data=None):
 
     # If the move ended the game, announce now
     if winner is not None:
+        # Learn from game if RL agent
+        learn_from_game(game, winner)
+        
         if winner == 1:
             opp = game['state'].players[1]
             emit('game_over', {
@@ -507,6 +567,9 @@ def play_card(data=None):
     winner = play_bot_until_player(game, gid)
     emit('game_state', serialize_state(game['state']), to=gid)
     if winner is not None:
+        # Learn from game if RL agent
+        learn_from_game(game, winner)
+        
         if winner == 1:
             opp = game['state'].players[1]
             emit('game_over', {
@@ -561,6 +624,9 @@ def play_sum(data=None):
 
     # If the game ended with the player's sum, announce immediately
     if winner is not None:
+        # Learn from game if RL agent
+        learn_from_game(game, winner)
+        
         if winner == 1:
             opp = game['state'].players[1]
             emit('game_over', {
@@ -575,6 +641,9 @@ def play_sum(data=None):
     winner = play_bot_until_player(game, gid)
     emit('game_state', serialize_state(game['state']), to=gid)
     if winner is not None:
+        # Learn from game if RL agent
+        learn_from_game(game, winner)
+        
         if winner == 1:
             opp = game['state'].players[1]
             emit('game_over', {
@@ -630,6 +699,76 @@ def get_legal_moves_handler(data=None):
         formatted_moves.append(move_data)
     
     emit('legal_moves', {'moves': formatted_moves})
+
+
+def learn_from_game(game: Dict[str, Any], winner: int):
+    """
+    Learn from a completed game using RL agent.
+    Only learns if agent_type is 'rl' AND training_mode is enabled.
+    
+    Args:
+        game: Game dictionary with move history
+        winner: 0 = player won, 1 = AI won, None = timeout
+    """
+    rl = game.get('rl_agent')
+    training_mode = game.get('training_mode', False)
+    
+    print(f"\n{'='*60}")
+    print(f"LEARN_FROM_GAME CALLED")
+    print(f"RL agent exists: {rl is not None}")
+    print(f"Training mode enabled: {training_mode}")
+    print(f"Winner: {winner} (0=player, 1=AI)")
+    print(f"Move history length: {len(game.get('move_history', []))}")
+    print(f"{'='*60}\n")
+    
+    if rl is None or not hasattr(rl, 'training') or not training_mode:
+        if not training_mode:
+            print("⚠️  Training mode NOT enabled - skipping learning")
+        return
+    
+    print(f"🎓 TRAINING STARTED - Learning from {len(game.get('move_history', []))} AI moves...")
+    
+    # Enable learning mode
+    was_training = rl.training
+    rl.training = True
+    
+    # Learn from all AI moves in reverse order
+    learned_count = 0
+    for move_data in game.get('move_history', []):
+        state_before = move_data['state_before']
+        move = move_data['move']
+        step = move_data.get('step', 0)
+        
+        # Compute reward (now with step efficiency penalty)
+        reward = compute_reward(
+            game['state'], game['state'], move, 
+            player_idx=1, winner=winner, step=step
+        )
+        
+        # Get action features
+        try:
+            action_features = get_action_features(move[0], move[1], game['state'], 1)
+            next_state = get_state_features(game['state'], 1)
+            next_moves = legal_moves(game['state'])
+            
+            # Update Q-values (learning from human strategy)
+            rl.update(state_before, action_features, reward, next_state, next_moves, 
+                     game['state'], winner is not None)
+            learned_count += 1
+        except Exception as e:
+            print(f"❌ Error learning from move: {e}")
+    
+    rl.training = was_training
+    
+    print(f"✅ Learned from {learned_count} moves")
+    
+    # Save model after learning from human
+    try:
+        rl.save(os.path.join(os.path.dirname(__file__), 'rl_agent_model.pkl'))
+        print(f"💾 Model saved! Winner: {'Player' if winner == 0 else 'AI' if winner == 1 else 'Timeout'}")
+        print(f"{'='*60}\n")
+    except Exception as e:
+        print(f"❌ Error saving model: {e}")
 
 
 @socketio.on('get_opponent_hand')

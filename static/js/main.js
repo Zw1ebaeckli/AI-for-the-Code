@@ -60,6 +60,7 @@ startGameBtn.addEventListener('click', () => {
     
     playerNameInput.classList.remove('error');
     const agentType = document.querySelector('input[name="agent"]:checked').value;
+    const trainingMode = document.getElementById('trainingModeCheckbox').checked;
     
     // Store player info in sessionStorage
     sessionStorage.setItem('playerName', playerName);
@@ -68,7 +69,8 @@ startGameBtn.addEventListener('click', () => {
     // Emit start game event
     socket.emit('start_game', {
         player_name: playerName,
-        agent_type: agentType
+        agent_type: agentType,
+        training_mode: trainingMode
     });
 });
 

@@ -32,6 +32,7 @@ import random
 import pickle
 from typing import Tuple, Dict, List
 from collections import defaultdict, deque
+from tqdm import tqdm
 from code_agent_v1 import (
     GameState, Card, setup_game, legal_moves, apply_move, 
     end_if_win, is_win, next_player_index, agent_decide_move,
@@ -42,25 +43,29 @@ from code_agent_v1 import (
 # REWARD SYSTEM (Simplified for clarity and stability)
 # =============================================================================
 REWARDS = {
-    "win": 200,              # Terminal: Won the game (strong signal)
-    "lose": -100,            # Terminal: Lost the game
-    "timeout": -50,          # Terminal: Game timed out
-    "progress_gain": 40,     # Gained a code match (PRIMARY objective, boosted)
-    "progress_loss": -40,    # Lost a code match (symmetric penalty)
-    "milestone_3": 20,       # Reached 3 code matches (close to winning)
-    "milestone_4": 30,       # Reached 4 code matches (ready to win)
-    "hand_reduce": 2,        # Reduced hand size (general progress)
-    "hand_reduce_smart": 12, # Played duplicate or non-code (strategic, boosted)
-    "forced_draw": -6,       # Had to draw when plays existed (bad choice, harsher)
-    "opp_hand_pressure": 5,  # Opponent hand grew (defensive good)
-    "action_play_bonus": 1,  # Played action card (minor incentive)
+    "win": 250,              # Terminal: Won the game (strong signal, increased)
+    "lose": -150,            # Terminal: Lost the game (harsher penalty)
+    "timeout": -75,          # Terminal: Game timed out (increased)
+    "progress_gain": 50,     # Gained a code match (PRIMARY objective, boosted further)
+    "progress_loss": -60,    # Lost a code match (harsher penalty)
+    "milestone_3": 30,       # Reached 3 code matches (close to winning, boosted)
+    "milestone_4": 50,       # Reached 4 code matches (ready to win, major boost)
+    "near_win_ready": 80,    # Have 4 code cards + can play them next turn
+    "hand_reduce": 3,        # Reduced hand size (general progress, slightly up)
+    "hand_reduce_smart": 15, # Played duplicate or non-code (strategic, boosted)
+    "forced_draw": -10,      # Had to draw when plays existed (worse penalty)
+    "opp_hand_pressure": 8,  # Opponent hand grew (defensive good, boosted)
+    "opp_near_win_defend": 25,  # Opponent was near win, we disrupted them
+    "action_play_bonus": 2,  # Played action card (minor incentive)
+    "reset_when_opponent_ahead": 35,  # Used RESET when opponent had progress
+    "plus2_when_behind": 20,  # Used +2 when opponent threatening
 }
 
 
 def get_state_features(game: GameState, player_idx: int) -> Tuple:
     """
     Extract features from game state for Q-learning.
-    Enhanced with strategic gameplay indicators.
+    Enhanced with strategic gameplay indicators and opponent threat assessment.
     """
     player = game.players[player_idx]
     hand = player.hand
@@ -78,10 +83,22 @@ def get_state_features(game: GameState, player_idx: int) -> Tuple:
     duplicates = sum(1 for v in code_digits 
                     if sum(1 for c in hand if c.kind == "NUMBER" and c.value == v) > 1)
     
+    # Joker cards (can substitute for any code digit)
+    jokers_in_hand = sum(1 for c in hand if c.kind == "ACTION" and c.action == "JOKER")
+    
+    # Effective progress including jokers (jokers can replace missing codes)
+    progress_with_jokers = min(4, progress + jokers_in_hand)
+    
     # Can we make progress? (have code cards we don't match yet)
     missing_codes = [d for d in code_digits 
                      if not any(c.kind == "NUMBER" and c.value == d for c in hand)]
     can_improve = int(len(missing_codes) > 0 and code_cards_in_hand > progress)
+    
+    # Opponent threat assessment
+    opp_progress = count_code_matches(opponent.hand, opponent.code)
+    opp_jokers = sum(1 for c in opponent.hand if c.kind == "ACTION" and c.action == "JOKER")
+    opp_threat = opp_progress + opp_jokers  # Opponent is dangerous if close to winning
+    opponent_is_threatening = int(opp_threat >= 3)  # Opponent has 3+ code cards or equivalent
     
     # Playability: do we have moves?
     moves = legal_moves(game)
@@ -91,10 +108,15 @@ def get_state_features(game: GameState, player_idx: int) -> Tuple:
                                for c in ([m[1][0]] if m[0] == "PlayNumber" else m[1][:2]))
                            for m in moves if m[1]))
     
-    # Game phase indicator (0=early, 1=mid, 2=endgame)
-    if progress >= 4 or opp_hand_size <= 2:
+    # Can we finish next turn?
+    can_finish_soon = int(progress_with_jokers >= 4 and has_play)
+    
+    # Game phase indicator (0=early, 1=mid, 2=endgame, 3=critical)
+    if progress_with_jokers >= 4 or opp_threat >= 4:
+        phase = 3  # Critical: must finish or block
+    elif progress_with_jokers >= 3 or opp_threat >= 3:
         phase = 2  # Endgame: must finish
-    elif progress >= 2:
+    elif progress >= 2 or opp_progress >= 2:
         phase = 1  # Mid-game: building
     else:
         phase = 0  # Early: exploring
@@ -381,9 +403,10 @@ class QLearningAgent:
 
 
 def compute_reward(game_before: GameState, game_after: GameState, move: Tuple[str, Tuple],
-                   player_idx: int, winner: int = None) -> float:
+                   player_idx: int, winner: int = None, step: int = 0) -> float:
     """
-    Compute reward for a transition.
+    Compute reward for a transition with enhanced strategic considerations.
+    Includes penalty for slow play (too many moves to win).
     """
     reward = 0.0
     
@@ -404,35 +427,65 @@ def compute_reward(game_before: GameState, game_after: GameState, move: Tuple[st
     # Determine game phase for adaptive rewards
     progress_before = count_code_matches(player_before.hand, player_before.code)
     progress_after = count_code_matches(player_after.hand, player_after.code)
+    opp_progress_before = count_code_matches(opp_before.hand, opp_before.code)
+    opp_progress_after = count_code_matches(opp_after.hand, opp_after.code)
     opp_hand_size = len(opp_after.hand)
     
-    # Game phase: 0=early, 1=mid, 2=endgame
-    if progress_after >= 4 or opp_hand_size <= 2:
-        phase = 2  # Endgame: urgency to finish
-    elif progress_after >= 2:
-        phase = 1  # Mid-game
-    else:
-        phase = 0  # Early game
+    # Joker counts
+    jokers_before = sum(1 for c in player_before.hand if c.kind == "ACTION" and c.action == "JOKER")
+    jokers_after = sum(1 for c in player_after.hand if c.kind == "ACTION" and c.action == "JOKER")
     
-    # Progress change (PRIMARY reward signal with phase scaling)
+    # Game phase: 0=early, 1=mid, 2=endgame, 3=critical
+    progress_with_jokers_after = progress_after + jokers_after
+    opp_threat_after = opp_progress_after + sum(1 for c in opp_after.hand if c.kind == "ACTION" and c.action == "JOKER")
+    
+    if progress_with_jokers_after >= 4 or opp_threat_after >= 4:
+        phase = 3
+    elif progress_with_jokers_after >= 3 or opp_threat_after >= 3:
+        phase = 2
+    elif progress_after >= 2 or opp_progress_after >= 2:
+        phase = 1
+    else:
+        phase = 0
+    
+    # Progress change (PRIMARY reward signal with AGGRESSIVE phase scaling)
     if progress_after > progress_before:
         progress_reward = REWARDS["progress_gain"] * (progress_after - progress_before)
-        # Scale up in endgame (more urgent)
-        if phase == 2:
-            progress_reward *= 1.5
+        # Scale UP dramatically in later phases
+        if phase == 3:
+            progress_reward *= 2.5  # Critical: 5x multiplier on top
+        elif phase == 2:
+            progress_reward *= 2.0
+        elif phase == 1:
+            progress_reward *= 1.3
         reward += progress_reward
         
-        # Milestone bonuses for getting close to winning
+        # MAJOR Milestone bonuses
         if progress_after >= 4 and progress_before < 4:
-            reward += REWARDS["milestone_4"]
+            bonus = REWARDS["milestone_4"] * (2.0 if phase >= 2 else 1.0)
+            reward += bonus
         elif progress_after >= 3 and progress_before < 3:
-            reward += REWARDS["milestone_3"]
+            bonus = REWARDS["milestone_3"] * (1.5 if phase >= 2 else 1.0)
+            reward += bonus
     elif progress_after < progress_before:
         penalty = REWARDS["progress_loss"] * (progress_before - progress_after)
-        # Harsher penalty in endgame
-        if phase == 2:
-            penalty *= 1.5
+        # Harsher penalty in later phases
+        if phase == 3:
+            penalty *= 2.5
+        elif phase == 2:
+            penalty *= 2.0
+        elif phase == 1:
+            penalty *= 1.3
         reward += penalty
+    
+    # NEW: Reward having all 4 code cards ready (with jokers)
+    if progress_with_jokers_after >= 4 and progress_with_jokers_after > (count_code_matches(player_before.hand, player_before.code) + jokers_before):
+        reward += REWARDS["near_win_ready"] * (1.5 if phase >= 2 else 1.0)
+    
+    # NEW: Defensive reward when opponent is threatening and we disrupt
+    opp_threat_before = opp_progress_before + jokers_before
+    if opp_threat_after < opp_threat_before and opp_threat_before >= 3:
+        reward += REWARDS["opp_near_win_defend"]
     
     # Hand size change
     hand_before = len(player_before.hand)
@@ -454,7 +507,7 @@ def compute_reward(game_before: GameState, game_after: GameState, move: Tuple[st
                 is_code = card.value in code_digits
                 
                 if is_duplicate or not is_code:
-                    reward += REWARDS["hand_reduce_smart"] * reduction
+                    reward += REWARDS["hand_reduce_smart"] * reduction * (1.2 if phase >= 1 else 1.0)
                 else:
                     reward += REWARDS["hand_reduce"] * reduction
         elif move_type == "PlaySum" and payload:
@@ -463,7 +516,7 @@ def compute_reward(game_before: GameState, game_after: GameState, move: Tuple[st
             count_b = sum(1 for c in player_before.hand if c.kind == "NUMBER" and c.value == card_b.value)
             
             if (count_a > 1 or count_b > 1) or (card_a.value not in code_digits and card_b.value not in code_digits):
-                reward += REWARDS["hand_reduce_smart"] * reduction
+                reward += REWARDS["hand_reduce_smart"] * reduction * (1.2 if phase >= 1 else 1.0)
             else:
                 reward += REWARDS["hand_reduce"] * reduction
         else:
@@ -471,17 +524,39 @@ def compute_reward(game_before: GameState, game_after: GameState, move: Tuple[st
     
     # Opponent hand pressure (when opponent hand grows, that's good for us)
     if opp_hand_after > opp_hand_before:
-        reward += REWARDS["opp_hand_pressure"] * (opp_hand_after - opp_hand_before)
+        reward += REWARDS["opp_hand_pressure"] * (opp_hand_after - opp_hand_before) * (1.3 if phase >= 2 else 1.0)
     
-    # Action card bonus
-    if move_type == "PlayAction":
+    # NEW: Reward strategic action card usage
+    if move_type == "PlayAction" and payload:
+        action_card = payload[0]
+        action = action_card.action
+        
+        # Reward RESET when opponent has progress
+        if action == "RESET" and opp_progress_before > 0:
+            reward += REWARDS["reset_when_opponent_ahead"] * (1.5 if opp_threat_before >= 3 else 1.0)
+        # Reward +2 when opponent is threatening
+        elif action == "PLUS2" and opp_threat_before >= 2:
+            reward += REWARDS["plus2_when_behind"] * (1.5 if opp_threat_before >= 3 else 1.0)
+        
         reward += REWARDS["action_play_bonus"]
     
     # Draw penalty (when we had plays available but drew anyway)
     if move_type == "Draw":
         moves = legal_moves(game_before)
         if any(m[0] in ("PlayNumber", "PlaySum", "PlayAction") for m in moves):
-            reward += REWARDS["forced_draw"]
+            penalty = REWARDS["forced_draw"] * (1.5 if phase >= 2 else 1.0)
+            reward += penalty
+    
+    # NEW: Step efficiency penalty (punish slow play like human players favor)
+    # Penalize moves taken after step 100 to encourage faster wins
+    if step > 100:
+        efficiency_penalty = -0.5 * (step - 100) / 100  # Gradually penalize late game slowness
+        reward += efficiency_penalty
+    
+    # Bonus for winning before step 100 (fast play)
+    if winner == player_idx and step < 100:
+        efficiency_bonus = 50 * (1.0 - step / 100)  # Up to +50 for winning in <50 moves
+        reward += efficiency_bonus
 
     return reward
 
@@ -502,12 +577,13 @@ def train_agent(agent: QLearningAgent, opponent, n_episodes: int = 1000,
                 max_steps: int = 300, verbose: bool = True, history: List[Dict] = None,
                 progress_every: int = 100):
     """
-    Train the RL agent by playing games.
+    Train the RL agent by playing games with progress bar.
     """
     agent.training = True
     wins = losses = timeouts = 0
     
-    for episode in range(n_episodes):
+    pbar = tqdm(range(n_episodes), desc="Training (Phase 2)", unit="episode")
+    for episode in pbar:
         game = setup_game(num_players=2)
         
         for step in range(max_steps):
@@ -538,7 +614,7 @@ def train_agent(agent: QLearningAgent, opponent, n_episodes: int = 1000,
             
             # Compute reward and update (only for agent's moves)
             if idx == 0:
-                reward = compute_reward(game_before, game, move, 0, winner)
+                reward = compute_reward(game_before, game, move, 0, winner, step=step)
                 next_state = get_state_features(game, 0)
                 next_moves = legal_moves(game) if winner is None else []
                 agent.update(state, action, reward, next_state, next_moves, game, winner is not None)
@@ -551,9 +627,6 @@ def train_agent(agent: QLearningAgent, opponent, n_episodes: int = 1000,
                 break
         else:
             timeouts += 1
-            # Timeout penalty
-            if idx == 0:
-                agent.update(state, action, REWARDS["timeout"], state, [], game, True)
         
         # Decay epsilon
         if episode % 100 == 0 and agent.epsilon > 0.05:
@@ -563,22 +636,19 @@ def train_agent(agent: QLearningAgent, opponent, n_episodes: int = 1000,
         if (episode + 1) % progress_every == 0:
             total = wins + losses + timeouts
             win_rate = wins / total if total else 0.0
-            loss_rate = losses / total if total else 0.0
-            timeout_rate = timeouts / total if total else 0.0
+            pbar.set_postfix({"win_rate": f"{win_rate:.1%}", "epsilon": f"{agent.epsilon:.3f}"})
             if history is not None:
                 history.append({
                     "episode": episode + 1,
                     "win_rate": win_rate,
-                    "loss_rate": loss_rate,
-                    "timeout_rate": timeout_rate,
+                    "loss_rate": losses / total if total else 0.0,
+                    "timeout_rate": timeouts / total if total else 0.0,
                     "epsilon": agent.epsilon,
                     "q_size": len(agent.q_table_a) + len(agent.q_table_b),
                 })
-            if verbose:
-                print(f"Episode {episode+1:4d} | Win: {win_rate:5.1%} | Loss: {loss_rate:5.1%} | "
-                      f"Timeout: {timeout_rate:5.1%} | Q-size: {len(agent.q_table_a)+len(agent.q_table_b)} | ε: {agent.epsilon:.3f}")
             wins = losses = timeouts = 0
     
+    pbar.close()
     return agent
 
 
@@ -613,7 +683,7 @@ def train_agent_mixed(agent: QLearningAgent,
                       progress_every: int = 200,
                       curriculum: bool = True):
     """
-    Train against opponents with curriculum learning.
+    Train against opponents with curriculum learning and progress bar.
     - Starts with random opponent (easy wins) if curriculum=True
     - Gradually increases difficulty: random -> rule-bot -> self-play
     - Decays epsilon periodically down to a floor.
@@ -625,18 +695,23 @@ def train_agent_mixed(agent: QLearningAgent,
     agent.training = True
     wins = losses = timeouts = 0
 
-    for episode in range(n_episodes):
+    pbar = tqdm(range(n_episodes), desc="Training (Phase 1)", unit="episode")
+    for episode in pbar:
         # Curriculum: first 20% random, next 40% rule-bot, last 40% mixed
         if curriculum:
             if episode < n_episodes * 0.2:
                 opponent = random_bot
+                phase_name = "vs Random"
             elif episode < n_episodes * 0.6:
                 opponent = rule_bot
+                phase_name = "vs Rule-Bot"
             else:
                 opponent = self_play if episode % 2 == 0 else rule_bot
+                phase_name = "vs Self/Rule"
         else:
             # Original: alternate rule-bot and self-play
             opponent = rule_bot if episode % 2 == 0 else self_play
+            phase_name = "vs Mixed"
         
         game = setup_game(num_players=2)
 
@@ -665,7 +740,7 @@ def train_agent_mixed(agent: QLearningAgent,
 
             # Update only when agent is the mover
             if idx == 0:
-                reward = compute_reward(game_before, game, move, 0, winner)
+                reward = compute_reward(game_before, game, move, 0, winner, step=step)
                 next_state = get_state_features(game, 0)
                 next_moves = legal_moves(game) if winner is None else []
                 agent.update(state, action, reward, next_state, next_moves, game, winner is not None)
@@ -680,8 +755,6 @@ def train_agent_mixed(agent: QLearningAgent,
                 break
         else:
             timeouts += 1
-            # Timeout penalty
-            agent.update(state, action, REWARDS["timeout"], state, [], game, True)
 
         # Epsilon schedule
         if (episode + 1) % decay_every == 0 and agent.epsilon > epsilon_floor:
@@ -693,6 +766,13 @@ def train_agent_mixed(agent: QLearningAgent,
             win_rate = wins / total if total else 0.0
             loss_rate = losses / total if total else 0.0
             timeout_rate = timeouts / total if total else 0.0
+            pbar.set_postfix({
+                "win": f"{win_rate:.1%}",
+                "loss": f"{loss_rate:.1%}",
+                "timeout": f"{timeout_rate:.1%}",
+                "epsilon": f"{agent.epsilon:.3f}",
+                "phase": phase_name
+            })
             if history is not None:
                 history.append({
                     "episode": episode + 1,
@@ -702,11 +782,9 @@ def train_agent_mixed(agent: QLearningAgent,
                     "epsilon": agent.epsilon,
                     "q_size": len(agent.q_table_a) + len(agent.q_table_b),
                 })
-            if verbose:
-                print(f"[Mixed] Episode {episode+1:4d} | Win: {win_rate:5.1%} | Loss: {loss_rate:5.1%} | "
-                      f"Timeout: {timeout_rate:5.1%} | Q-size: {len(agent.q_table_a)+len(agent.q_table_b)} | ε: {agent.epsilon:.3f}")
             wins = losses = timeouts = 0
-
+    
+    pbar.close()
     return agent
 
 
@@ -788,23 +866,24 @@ def print_reward_table():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("DOUBLE Q-LEARNING AGENT TRAINING")
+    print("DOUBLE Q-LEARNING AGENT TRAINING FOR 80% WIN RATE")
     print("Reduces overestimation bias for more stable learning")
     print("=" * 60)
     print_reward_table()
 
-    # Hyperparameters optimized for Double Q-Learning
-    alpha = 0.3        # Higher learning rate (Double Q is more stable)
-    gamma = 0.99       # Very high discount for long-term strategy
-    epsilon = 0.4      # Higher initial exploration (reduced bias allows more)
-    optimistic_init = 20.0  # Higher optimism (Double Q handles it better)
-    replay_size = 20000     # Larger replay buffer
+    # Hyperparameters: proven working, with extended training
+    alpha = 0.30        # Standard learning rate
+    gamma = 0.99        # High discount for long-term strategy
+    epsilon = 0.40      # Standard exploration
+    optimistic_init = 20.0  # Standard optimism
+    replay_size = 20000     # Standard replay buffer
 
     agent = QLearningAgent(alpha=alpha, gamma=gamma, epsilon=epsilon, 
                           optimistic_init=optimistic_init, replay_size=replay_size)
 
-    mixed_episodes = 3000   # Increased for curriculum learning phases
-    focused_episodes = 1200 # More refinement
+    # Aggressive training for 80% win rate
+    mixed_episodes = 5000   # More curriculum iterations
+    focused_episodes = 2500 # Extended focused training
     mixed_history: List[Dict] = []
     focused_history: List[Dict] = []
 
@@ -814,14 +893,14 @@ if __name__ == "__main__":
         n_episodes=mixed_episodes,
         max_steps=400,
         verbose=True,
-        epsilon_floor=0.02,  # Very low floor for strong exploitation
-        decay_every=200,     # Aggressive decay
-        decay_factor=0.96,   # Faster convergence to exploitation
+        epsilon_floor=0.02,  # Low floor
+        decay_every=250,     # Gradual decay
+        decay_factor=0.96,
         history=mixed_history,
-        curriculum=True,     # Enable curriculum learning
+        curriculum=True,
     )
 
-    print("\nPhase 2: Focused training vs rule-bot (polish)")
+    print("\nPhase 2: Focused training vs rule-bot")
     train_agent(
         agent,
         agent_decide_move,
@@ -833,18 +912,27 @@ if __name__ == "__main__":
 
     print_training_table(mixed_history, focused_history, mixed_episodes)
 
-    # Evaluate with no exploration
+    # Evaluate
     print("\n" + "=" * 75)
-    print("Evaluation (500 games, no exploration)")
+    print("FINAL EVALUATION (1000 games, no exploration)")
     print("=" * 75)
     agent.training = False
     agent.epsilon = 0.0
-    results = evaluate_agent(agent, agent_decide_move, n_games=500)
+    results = evaluate_agent(agent, agent_decide_move, n_games=1000)
     print(
         f"RL Agent vs Rule-bot | Win: {results['win_rate']:5.1%} | "
-        f"Loss: {results['losses']/500:5.1%} | Timeout: {results['timeouts']/500:5.1%} | "
-        f"Steps: {results['avg_steps']:.0f}"
+        f"Loss: {results['losses']/1000:5.1%} | Timeout: {results['timeouts']/1000:5.1%} | "
+        f"Avg Steps: {results['avg_steps']:.0f}"
     )
-
-    # Save model
+    
+    target = 0.80
+    if results['win_rate'] >= target:
+        print(f"\n🎉 SUCCESS! Reached {results['win_rate']:.1%} (target: {target:.0%})")
+    else:
+        gap = target - results['win_rate']
+        print(f"\n⚠️  Current: {results['win_rate']:.1%} (target: {target:.0%}, gap: {gap:.1%})")
+    
     agent.save("rl_agent_mixed.pkl")
+    print("\nModel saved as rl_agent_mixed.pkl")
+
+
